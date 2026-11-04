@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v12';
+const CURRENT_RELEASE_VER = '20261104_v13';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -157,6 +157,10 @@ function parseMarkdown(md) {
 
   // 4. Headers with IDs for Table of Contents
   let headingCount = 0;
+  html = html.replace(/^#### (.*$)/gim, (m, title) => {
+    headingCount++;
+    return `\n\n<h4 id="sec-h4-${headingCount}">${title}</h4>\n\n`;
+  });
   html = html.replace(/^### (.*$)/gim, (m, title) => {
     headingCount++;
     return `\n\n<h3 id="sec-h3-${headingCount}">${title}</h3>\n\n`;
