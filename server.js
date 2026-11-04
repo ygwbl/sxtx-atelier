@@ -205,12 +205,19 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
     headers["Expires"] = "0";
     headers["ETag"] = `W/"${Date.now()}-${hash.slice(0, 8)}"`; // Dynamic ETag defeats edge proxy stale caching
   } else if (isCacheable) {
-    headers["Cache-Control"] = "public, max-age=31536000, immutable";
-    headers["CDN-Cache-Control"] = "max-age=31536000";
-    headers["Cloudflare-CDN-Cache-Control"] = "max-age=31536000";
+    const hasVersion = req.url && (req.url.includes("?v=") || req.url.includes("&v="));
+    if (hasVersion) {
+      headers["Cache-Control"] = "public, max-age=31536000, immutable";
+      headers["CDN-Cache-Control"] = "max-age=31536000";
+      headers["Cloudflare-CDN-Cache-Control"] = "max-age=31536000";
+    } else {
+      headers["Cache-Control"] = "public, max-age=60, must-revalidate";
+      headers["CDN-Cache-Control"] = "max-age=120";
+      headers["Cloudflare-CDN-Cache-Control"] = "max-age=120";
+    }
     headers["ETag"] = etag;
   } else {
-    headers["Cache-Control"] = "public, max-age=3600";
+    headers["Cache-Control"] = "public, max-age=60, must-revalidate";
     headers["ETag"] = etag;
   }
 

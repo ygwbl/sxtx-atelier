@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v21';
+const CURRENT_RELEASE_VER = '20261105_v23';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -544,7 +544,7 @@ function renderMessages() {
           <div class="msg-echo-box">
             <div class="echo-header">
               <div class="echo-sender">
-                <img src="/logo.png?v=20261104_v21" alt="工坊主理人" class="echo-avatar">
+                <img src="/logo.png?v=20261105_v23" alt="工坊主理人" class="echo-avatar">
                 <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
                 <span class="echo-badge-seal">主理人</span>
               </div>
@@ -2181,8 +2181,11 @@ window.addEventListener('DOMContentLoaded', () => {
     if (window.location.hash === '#admin') openAdminModal();
   });
 
-  navigator.serviceWorker.register('/sw.js').then((reg) => {
-      console.log('Sxltx Atelier PWA Active:', reg.scope);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (let reg of regs) {
+        reg.unregister();
+      }
     }).catch(() => {});
   }
 });
