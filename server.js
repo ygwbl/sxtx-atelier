@@ -659,15 +659,15 @@ const server = http.createServer(async (req, res) => {
             messages: [
               {
                 role: "system",
-                content: "你是「纸境工坊」的AI主理人Sxltx。请用具有东方纸境美学、温润、克制且真诚的文风（60-120字），回复访客在工坊留言薄上的留墨。避免浮夸营销或生硬套话，像在安静的书斋里给推门而入的客人体面奉茶回笔。"
+                content: "你是独立技术博客「纸境工坊」的主理人Sxltx。工坊技术栈：Node.js极简原生服务、轻量云主机4核8G、Cloudflare全球隧道直连、腾讯云EdgeOne加速、严格禁用stale-if-error死锁、前端Auto-Bust版本指纹自愈。你在博客留言薄（Guestbook）上给访客回墨。准则：1.【切中主题，针对性强】：必须针对访客提到的具体问题、技术话题或感悟做实质性回应。如果是提问，必须结合你的真实工程实践给出干货解答，严禁答非所问；2.【拒绝假大空与AI虚假套话】：严禁使用“茶香一盏待君再续前缘”、“水墨丹青”、“字字如金”等假大空古风废话。说话要像一个真正动手写代码、懂工程实战、真诚谦逊的活人技术博主；3.【务实克制】：语气自然真诚，条理清晰，字数控制在80~180字之间。"
               },
               {
                 role: "user",
                 content: `访客称谓：${author || '墨友'}\n留墨内容：${content}`
               }
             ],
-            temperature: 0.7,
-            max_tokens: 250
+            temperature: 0.4,
+            max_tokens: 300
           }),
           signal: AbortSignal.timeout(9000)
         });
@@ -690,18 +690,20 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Fallback: Local Semantic Intent Matching Engine
+    // Fallback: Intelligent Semantic Intent Matching Engine
     let echoContent = "";
-    if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
-      echoContent = "见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。";
+    const isQuestion = text.includes("？") || text.includes("?") || text.includes("怎么") || text.includes("如何") || text.includes("请教") || text.includes("为什么") || text.includes("何解");
+
+    if (isQuestion) {
+      echoContent = `敬复【${author || '墨友'}】：感谢您的深入探讨。关于您提及的具体工程细节与疑问，工坊已妥善归档入卷；因涉及架构深层实现，稍后主理人会在控制台为您补充详尽复盘，欢迎持续交流。`;
+    } else if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
+      echoContent = `致【${author || '墨友'}】：见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。`;
     } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络") || text.includes("cdn") || text.includes("缓存")) {
-      echoContent = "同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。";
+      echoContent = `致【${author || '墨友'}】：同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。`;
     } else if (text.includes("生活") || text.includes("加油") || text.includes("坚持") || text.includes("心境") || text.includes("思考") || text.includes("迷茫") || text.includes("未来") || text.includes("岁月") || text.includes("时间")) {
-      echoContent = "纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。";
-    } else if (text.includes("你好") || text.includes("hello") || text.includes("hi") || text.includes("支持") || text.includes("逛逛") || text.includes("打卡") || text.includes("来看看") || text.includes("路过")) {
-      echoContent = "山川辽阔，比特相连。感谢旅人驻足留墨，数字世界的这一隅自留地，随时欢迎您常来坐坐。";
+      echoContent = `致【${author || '墨友'}】：纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。`;
     } else {
-      echoContent = "感谢旅人驻足留墨。微云过隙，字有余温。在数字世界的这一隅自留地，很荣幸与您的思想产生共振。";
+      echoContent = `致【${author || '墨友'}】：山川辽阔，比特相连。感谢旅人驻足留墨，文字有余温，工坊随时欢迎常来坐坐。`;
     }
 
     return {
