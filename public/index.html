@@ -25,7 +25,7 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Sxtx · 纸境工坊 · 沉思与造物">
   <meta name="twitter:description" content="Sxtx 的个人工坊与数字漫游手记。纯正一线工程实战复盘、现代原生 Web 架构与深度造物。">
-  <link rel="stylesheet" href="/style.css?v=20261104_v5">
+  <link rel="stylesheet" href="/style.css?v=20261104_v6">
 
   <style id="head-typography-override">
     .featured-summary,
@@ -694,6 +694,27 @@
           </button>
         </div>
 
+        
+        <!-- Studio Metric Board (Ludi Video 3: 看板系统) -->
+        <div class="studio-metric-board">
+          <div class="metric-card">
+            <span class="metric-num" id="mb-art-count">0</span>
+            <span class="metric-label">文墨沉淀</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num" id="mb-mom-count">0</span>
+            <span class="metric-label">灵感微语</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-num" id="mb-msg-count">0</span>
+            <span class="metric-label">知音留墨</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-status-val"><span class="pulse-dot-live"></span> HTTP/2</span>
+            <span class="metric-label">隧道长效心跳</span>
+          </div>
+        </div>
+
         <!-- Tab 1: Write / Edit Article -->
         <div id="pane-write-article" class="studio-pane active">
           <form id="form-article-editor" class="editor-form">
@@ -705,13 +726,14 @@
               </div>
               <div class="field-wrap">
                 <label>分类</label>
-                <select id="edit-art-category" class="paper-select">
-                  <option value="技术">技术</option>
-                  <option value="设计">设计</option>
-                  <option value="随笔">随笔</option>
-                  <option value="思考">思考</option>
-                  <option value="生活">生活</option>
-                </select>
+                <div class="segmented-control-group" id="edit-art-category-group" role="radiogroup" aria-label="文章分类">
+                  <button type="button" class="segment-pill active" data-val="技术">技术</button>
+                  <button type="button" class="segment-pill" data-val="设计">设计</button>
+                  <button type="button" class="segment-pill" data-val="随笔">随笔</button>
+                  <button type="button" class="segment-pill" data-val="思考">思考</button>
+                  <button type="button" class="segment-pill" data-val="生活">生活</button>
+                  <input type="hidden" id="edit-art-category" value="技术">
+                </div>
               </div>
               <div class="field-wrap">
                 <label>预估阅读时间</label>
@@ -880,7 +902,7 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/app.js?v=20261104_v5"></script>
+  <script src="/app.js?v=20261104_v6"></script>
   <!-- Back to top floating button -->
   <button id="btn-back-to-top" class="back-to-top-btn" title="平滑返回顶部" aria-label="返回顶部">
     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

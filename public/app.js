@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v5';
+const CURRENT_RELEASE_VER = '20261104_v6';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -65,6 +65,44 @@ try {
  * Sxtx · 纸境工坊 · Studio Core Engine
  * Zero Heavy Bundler · Stale-While-Revalidate · Instant Load
  */
+
+
+// Ludi Video 3 & 9: Semantic Badges & Segmented Radio Control
+function getCatClass(cat) {
+  if (cat === '技术') return 'cat-badge-tech';
+  if (cat === '设计') return 'cat-badge-design';
+  if (cat === '随笔') return 'cat-badge-essay';
+  if (cat === '思考') return 'cat-badge-think';
+  return 'cat-badge-life';
+}
+
+function initSegmentedControl() {
+  const group = document.getElementById('edit-art-category-group');
+  if (!group) return;
+  const hiddenInput = document.getElementById('edit-art-category');
+  group.querySelectorAll('.segment-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      group.querySelectorAll('.segment-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      if (hiddenInput) hiddenInput.value = pill.getAttribute('data-val');
+    });
+  });
+}
+
+function setSegmentedCategory(val) {
+  const group = document.getElementById('edit-art-category-group');
+  const hiddenInput = document.getElementById('edit-art-category');
+  if (hiddenInput) hiddenInput.value = val;
+  if (group) {
+    group.querySelectorAll('.segment-pill').forEach(pill => {
+      if (pill.getAttribute('data-val') === val) {
+        pill.classList.add('active');
+      } else {
+        pill.classList.remove('active');
+      }
+    });
+  }
+}
 
 // Global State
 let articles = [];
@@ -964,6 +1002,7 @@ document.getElementById('form-article-editor')?.addEventListener('submit', async
 function resetArticleForm() {
   document.getElementById('edit-art-id').value = '';
   document.getElementById('edit-art-title').value = '';
+  setSegmentedCategory('技术');
   document.getElementById('edit-art-readtime').value = '3 分钟';
   document.getElementById('edit-art-summary').value = '';
   document.getElementById('edit-art-content').value = '';
@@ -978,6 +1017,9 @@ function updateStudioArticlesList() {
   const countEl = document.getElementById('studio-art-count');
   if (countEl) countEl.textContent = articles.length;
 
+  const mbArt = document.getElementById('mb-art-count');
+  if (mbArt) mbArt.textContent = articles.length;
+
   const list = document.getElementById('studio-art-list');
   if (!list) return;
 
@@ -986,18 +1028,23 @@ function updateStudioArticlesList() {
     return;
   }
 
-  list.innerHTML = articles.map(art => `
-    <div class="studio-item-row">
-      <div class="studio-item-left">
-        <span class="sir-title">${escapeHtml(art.title)}</span>
-        <span class="sir-meta">${art.category} · ${art.date} · ${art.readTime}</span>
+  list.innerHTML = articles.map(art => {
+    const catCls = getCatClass(art.category);
+    return `
+      <div class="studio-item-row">
+        <span class="cat-badge ${catCls}">${escapeHtml(art.category || '随笔')}</span>
+        <span class="sir-title-stream" title="${escapeHtml(art.title)}">${escapeHtml(art.title)}</span>
+        <div class="sir-time-group">
+          <span class="sir-time-rel">${formatRelativeTime(art.date)}</span>
+          <span class="sir-time-abs">(${escapeHtml(art.date || '')})</span>
+        </div>
+        <div class="studio-item-actions" style="display:flex;gap:0.35rem;">
+          <button class="action-btn-sm edit-art-btn" data-id="${art.id}">编辑</button>
+          <button class="action-btn-sm delete delete-art-btn" data-id="${art.id}">删除</button>
+        </div>
       </div>
-      <div class="studio-item-actions">
-        <button class="action-btn-sm edit-art-btn" data-id="${art.id}">编辑</button>
-        <button class="action-btn-sm delete delete-art-btn" data-id="${art.id}">删除</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 
   // Bind edit & delete
   list.querySelectorAll('.edit-art-btn').forEach(btn => {
@@ -1006,7 +1053,7 @@ function updateStudioArticlesList() {
       if (art) {
         document.getElementById('edit-art-id').value = art.id;
         document.getElementById('edit-art-title').value = art.title;
-        document.getElementById('edit-art-category').value = art.category;
+        setSegmentedCategory(art.category || '技术');
         document.getElementById('edit-art-readtime').value = art.readTime || '3 分钟';
         document.getElementById('edit-art-summary').value = art.summary || '';
         document.getElementById('edit-art-content').value = art.content || '';
@@ -1061,6 +1108,8 @@ document.getElementById('form-moment-editor')?.addEventListener('submit', async 
 
 // Update Studio Moments List
 function updateStudioMomentsList() {
+  const mbMom = document.getElementById('mb-mom-count');
+  if (mbMom) mbMom.textContent = moments.length;
   const list = document.getElementById('studio-mom-list');
   if (!list) return;
 
@@ -1094,6 +1143,8 @@ function updateStudioMomentsList() {
 
 // Update Studio Messages List
 function updateStudioMessagesList() {
+  const mbMsg = document.getElementById('mb-msg-count');
+  if (mbMsg) mbMsg.textContent = messages.length;
   const list = document.getElementById('studio-msg-list');
   if (!list) return;
 
@@ -1361,7 +1412,23 @@ document.getElementById('guestbook-form')?.addEventListener('submit', async (e) 
 // --------------------------------------------------------------------------
 // 7. Event Listeners & Keyboard Shortcuts
 // --------------------------------------------------------------------------
+
+// Ludi Video 10 Detail 1: Chinese Composition Event Protection (打中文不误发)
+function attachCompositionGuard(inputEl, onEnterCallback) {
+  if (!inputEl) return;
+  let isComposing = false;
+  inputEl.addEventListener('compositionstart', () => { isComposing = true; });
+  inputEl.addEventListener('compositionend', () => { isComposing = false; });
+  inputEl.addEventListener('keydown', (e) => {
+    if (isComposing || e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' && onEnterCallback) {
+      onEnterCallback(e);
+    }
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  initSegmentedControl();
   initData();
   initChronoAtmosphere();
 
@@ -1808,7 +1875,23 @@ function initGuestbookEnhancements() {
 }
 
 // 4. 全局键盘导航增强与初始化
+
+// Ludi Video 10 Detail 1: Chinese Composition Event Protection (打中文不误发)
+function attachCompositionGuard(inputEl, onEnterCallback) {
+  if (!inputEl) return;
+  let isComposing = false;
+  inputEl.addEventListener('compositionstart', () => { isComposing = true; });
+  inputEl.addEventListener('compositionend', () => { isComposing = false; });
+  inputEl.addEventListener('keydown', (e) => {
+    if (isComposing || e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter' && onEnterCallback) {
+      onEnterCallback(e);
+    }
+  });
+}
+
 window.addEventListener('DOMContentLoaded', () => {
+  initSegmentedControl();
   initTheme();
   initQuoteSystem();
   initGuestbookEnhancements();

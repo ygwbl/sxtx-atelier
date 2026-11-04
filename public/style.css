@@ -43,6 +43,7 @@
 }
 
 html {
+  scrollbar-gutter: stable;
   font-size: 16px;
   scroll-behavior: smooth;
   background-color: var(--bg-paper);
@@ -4341,5 +4342,298 @@ button,
   #btn-close-search {
     min-width: 38px !important;
     min-height: 38px !important;
+  }
+}
+
+
+/* ==========================================================================
+   2026.11.04 LUDI 13-RULES COMPREHENSIVE DESIGN REFACTOR
+   - Video 3: 烂后台四刀救赎 (等流对齐、时间分层、语义标签、四维看板)
+   - Video 9: 别再乱用下拉框 (分段控制器 Segmented Control)
+   - Video 10: 大厂AI五大隐藏细节 (拼音防误发、内外圆角同心、单层纯净边框、防抖)
+   - Video 11: 告别塑料感细节 (两行代码治乱抖 scrollbar-gutter: stable、视网膜细线)
+   - Video 12 & 13: 弹层抽屉体系化 (Modal vs Drawer vs Toast vs Popover)
+   ========================================================================== */
+
+/* --- 1. 两行代码治乱抖 (Video 11 Detail 4) --- */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* --- 2. 别再乱用下拉框：大厂分段单选控制器 (Video 9) --- */
+.segmented-control-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-subtle, #f5f4ef);
+  border: 1px solid var(--border-line, rgba(225, 221, 212, 0.85));
+  border-radius: 8px; /* R_outer = 8px */
+  padding: 3px;       /* padding = 3px */
+  gap: 2px;
+  width: 100%;
+  max-width: 440px;
+  box-sizing: border-box;
+}
+
+.segment-pill {
+  flex: 1;
+  min-height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #52525b);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 5px; /* R_inner = 8 - 3 = 5px (数学严谨：内外圆角同心！) */
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  white-space: nowrap;
+}
+
+.segment-pill:hover {
+  color: var(--text-title);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.segment-pill.active {
+  background: var(--bg-card, #ffffff);
+  color: var(--text-title, #18181b);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.segment-pill:active {
+  transform: scale(0.95);
+}
+
+/* --- 3. 烂后台救赎：四维指标数据看板 (Video 3 看板) --- */
+.studio-metric-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 8px; /* R_outer = 8px */
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--transition-fast), border-color var(--transition-fast);
+}
+
+.metric-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-focus);
+}
+
+.metric-num {
+  font-family: var(--font-mono);
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--text-title);
+  line-height: 1.2;
+}
+
+.metric-status-val {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.pulse-dot-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #059669;
+  box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.6);
+  animation: pulseEmerald 2s infinite;
+  display: inline-block;
+}
+
+@keyframes pulseEmerald {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.6);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 6px rgba(5, 150, 105, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(5, 150, 105, 0);
+  }
+}
+
+.metric-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* --- 4. 烂后台救赎：等流对齐与语义色阶标签 (Video 3 等流、时间、标签) --- */
+.studio-stream-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.studio-item-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.studio-item-row:hover {
+  background: var(--bg-hover);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+/* 语义分类彩色胶囊标签 (Video 3 标签) */
+.cat-badge {
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.cat-badge-tech {
+  background: rgba(5, 150, 105, 0.08);
+  color: #047857;
+  border: 1px solid rgba(5, 150, 105, 0.2);
+}
+
+.cat-badge-design {
+  background: rgba(185, 28, 28, 0.08);
+  color: #b91c1c;
+  border: 1px solid rgba(185, 28, 28, 0.2);
+}
+
+.cat-badge-essay {
+  background: rgba(63, 63, 70, 0.08);
+  color: #3f3f46;
+  border: 1px solid rgba(63, 63, 70, 0.2);
+}
+
+.cat-badge-think {
+  background: rgba(217, 119, 6, 0.08);
+  color: #b45309;
+  border: 1px solid rgba(217, 119, 6, 0.2);
+}
+
+.cat-badge-life {
+  background: rgba(13, 148, 136, 0.08);
+  color: #0f766e;
+  border: 1px solid rgba(13, 148, 136, 0.2);
+}
+
+/* 等流标题与元信息 */
+.sir-title-stream {
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--text-title);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 分层时间体系：相对友好时间 + 绝对精确日期 (Video 3 时间) */
+.sir-time-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sir-time-rel {
+  font-weight: 500;
+  color: var(--text-body);
+}
+
+.sir-time-abs {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+/* 按钮出海自适应 (Video 6) */
+.action-btn-sm {
+  min-width: 52px;
+  width: auto;
+  max-width: 100%;
+  padding: 0.35rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--border-line);
+  background: var(--bg-subtle);
+  color: var(--text-title);
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: all var(--transition-fast);
+}
+
+.action-btn-sm:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-focus);
+}
+
+.action-btn-sm.delete {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.action-btn-sm.delete:hover {
+  background: #fee2e2;
+  border-color: #b91c1c;
+}
+
+.action-btn-sm:active {
+  transform: scale(0.95);
+}
+
+/* 移动端看板自适应 */
+@media (max-width: 640px) {
+  .studio-metric-board {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+  .studio-item-row {
+    grid-template-columns: 1fr auto !important;
+    grid-template-rows: auto auto !important;
+    gap: 0.45rem !important;
+    padding: 0.65rem 0.85rem !important;
+  }
+  .sir-title-stream {
+    grid-column: 1 / 3 !important;
   }
 }
