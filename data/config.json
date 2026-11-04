@@ -5,5 +5,11 @@
   "author": "Sxltx",
   "bio": "这里是 Sxltx 的个人工坊。记录关于云原生架构、现代极简交互与自动化系统的深度沉淀；没有浮躁的算法推荐与杂乱信息，仅保留文字、代码与运行中的造物。",
   "stampText": "纸境ATELIER",
-  "glmApiKey": "1f3b6cbc464040c8a28f0cde396fc4e4.jgQV0rXJwFeWwe3W"
+  "glmApiKey": "1f3b6cbc464040c8a28f0cde396fc4e4.jgQV0rXJwFeWwe3W",
+  "imageGen": {
+    "provider": "pipiwang",
+    "baseUrl": "https://img.pipiwangcom.com/v1",
+    "apiKey": "sk-Tkh8xl7XqIlbiGje1wI9g6HJBnCSZqFBm2W9ym5Q",
+    "model": "gork"
+  }
 }
