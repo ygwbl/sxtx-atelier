@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v16';
+const CURRENT_RELEASE_VER = '20261104_v17';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -1212,8 +1212,8 @@ function updateStudioMessagesList() {
   }
 
   list.innerHTML = messages.map(msg => `
-    <div class="studio-item-row" id="studio-msg-row-${escapeHtml(msg.id)}" style="flex-direction:column;align-items:stretch;padding:1rem 1.15rem;margin-bottom:0.85rem;background:var(--bg-card);border:1px solid var(--border-line);border-radius:6px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+    <div class="studio-msg-card" id="studio-msg-row-${escapeHtml(msg.id)}">
+      <div class="studio-msg-header-row">
         <div class="studio-item-left" style="flex:1;">
           <span class="sir-title" style="font-weight:600;display:block;margin-bottom:0.35rem;font-size:0.95rem;color:var(--text-title);line-height:1.5;">${escapeHtml(msg.content)}</span>
           <span class="sir-meta" style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.35rem;">
@@ -1230,21 +1230,21 @@ function updateStudioMessagesList() {
         </div>
       </div>
 
-      <!-- Current Reply Status -->
-      <div id="reply-preview-${escapeHtml(msg.id)}" style="margin-top:0.45rem;">
+      <!-- Current Reply Status (Full width bar under message) -->
+      <div id="reply-preview-${escapeHtml(msg.id)}" class="studio-echo-wrap">
         ${msg.echo ? `
-          <div class="sir-echo-preview" style="padding:0.45rem 0.75rem;background:var(--bg-subtle);border-left:3px solid var(--brand-seal, #b83b3b);font-size:0.84rem;color:var(--text-body);border-radius:2px;line-height:1.5;">
-            <strong style="color:var(--brand-seal, #b83b3b);">✦ 工坊回笔：</strong>${escapeHtml(msg.echo.content)}
+          <div class="sir-echo-preview">
+            <strong>✦ 工坊回笔：</strong><span>${escapeHtml(msg.echo.content)}</span>
           </div>
         ` : `
-          <div class="sir-echo-preview" style="font-size:0.78rem;color:var(--text-muted);font-style:italic;">（暂无主理人回笔）</div>
+          <div class="sir-echo-preview empty">（暂无主理人回笔）</div>
         `}
       </div>
 
       <!-- Inline Reply Form (Hidden by default, toggled on click) -->
-      <div id="reply-form-${escapeHtml(msg.id)}" class="inline-reply-box" style="display:none;margin-top:0.65rem;padding-top:0.65rem;border-top:1px dashed var(--border-line);">
-        <div style="display:flex;gap:0.5rem;align-items:center;">
-          <input type="text" id="reply-input-${escapeHtml(msg.id)}" value="${escapeHtml(msg.echo ? msg.echo.content : '')}" placeholder="以主理人身份写下工坊回笔..." style="flex:1;padding:0.45rem 0.75rem;border:1px solid var(--border-line);border-radius:4px;font-size:0.85rem;background:var(--bg-paper);color:var(--text-title);" maxlength="300" />
+      <div id="reply-form-${escapeHtml(msg.id)}" class="inline-reply-box" style="display:none;">
+        <div class="inline-reply-inputs">
+          <input type="text" id="reply-input-${escapeHtml(msg.id)}" value="${escapeHtml(msg.echo ? msg.echo.content : '')}" placeholder="以主理人身份写下工坊回笔..." maxlength="300" />
           <button class="paper-btn btn-primary submit-reply-btn" data-id="${escapeHtml(msg.id)}" style="padding:0.45rem 0.85rem;font-size:0.82rem;white-space:nowrap;">
             保存回信
           </button>

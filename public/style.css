@@ -4875,3 +4875,90 @@ body.ink-dark-mode .fb-light-img {
 body.ink-dark-mode .fb-dark-img {
   display: inline-block !important;
 }
+
+/* Studio Message Review Card (Eliminates grid column squishing) */
+.studio-msg-card {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding: 1rem 1.25rem !important;
+  margin-bottom: 0.85rem !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-line) !important;
+  border-radius: 6px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  transition: all var(--transition-fast) !important;
+}
+
+.studio-msg-card:hover {
+  background: var(--bg-hover) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+.studio-msg-header-row {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important;
+  gap: 1rem !important;
+  width: 100% !important;
+}
+
+.studio-echo-wrap {
+  margin-top: 0.65rem !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.sir-echo-preview {
+  display: block !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0.65rem 0.9rem !important;
+  background: var(--bg-subtle) !important;
+  border-left: 3px solid var(--brand-seal, #b83b3b) !important;
+  font-size: 0.84rem !important;
+  color: var(--text-body) !important;
+  border-radius: 3px !important;
+  line-height: 1.6 !important;
+  word-break: break-word !important;
+}
+
+.sir-echo-preview strong {
+  color: var(--brand-seal, #b83b3b) !important;
+  display: inline-block !important;
+  margin-right: 0.35rem !important;
+}
+
+.sir-echo-preview.empty {
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  font-style: italic !important;
+  border-left: none !important;
+  background: transparent !important;
+  padding: 0.2rem 0 !important;
+}
+
+.inline-reply-box {
+  margin-top: 0.65rem !important;
+  padding-top: 0.65rem !important;
+  border-top: 1px dashed var(--border-line) !important;
+  width: 100% !important;
+}
+
+.inline-reply-inputs {
+  display: flex !important;
+  gap: 0.5rem !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.inline-reply-inputs input {
+  flex: 1 !important;
+  padding: 0.45rem 0.75rem !important;
+  border: 1px solid var(--border-line) !important;
+  border-radius: 4px !important;
+  font-size: 0.85rem !important;
+  background: var(--bg-paper) !important;
+  color: var(--text-title) !important;
+}
