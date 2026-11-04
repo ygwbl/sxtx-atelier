@@ -23,7 +23,6 @@ function hashPassword(pwd) {
   return crypto.createHash("sha256").update(pwd + SALT).digest("hex");
 }
 
-// Session store in memory
 // Stateless HMAC Auth Token (Survives Server Restarts)
 function generateAuthToken() {
   const expiresAt = Date.now() + 30 * 24 * 3600 * 1000; // 30 days
@@ -48,7 +47,6 @@ function verifyAuthToken(token) {
   }
 }
 
-
 // Default config
 function getOrInitConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
@@ -70,7 +68,6 @@ function getOrInitConfig() {
   }
 }
 
-// Helpers for reading/writing JSON
 function readJSON(file, fallback = []) {
   if (!fs.existsSync(file)) return fallback;
   try {
@@ -82,6 +79,60 @@ function readJSON(file, fallback = []) {
 
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+}
+
+// Extract Real Client IP (Cloudflare & Reverse Proxy Guarded)
+function getClientIP(req) {
+  const cfIP = req.headers["cf-connecting-ip"];
+  if (cfIP) return cfIP.trim();
+  const xff = req.headers["x-forwarded-for"];
+  if (xff) return xff.split(",")[0].trim();
+  const xReal = req.headers["x-real-ip"];
+  if (xReal) return xReal.trim();
+  return req.socket.remoteAddress || "127.0.0.1";
+}
+
+// In-Memory Sliding-Window Rate Limiter for Messages
+const messageRateMap = new Map(); // IP -> { lastPostTime, count, windowStart, lastContentHash }
+function checkMessageRateLimit(ip, content) {
+  const now = Date.now();
+  const record = messageRateMap.get(ip) || { lastPostTime: 0, count: 0, windowStart: now, lastContentHash: "" };
+
+  // Rule 1: 15-second mandatory cooldown between consecutive posts
+  if (now - record.lastPostTime < 15000) {
+    const waitSec = Math.ceil((15000 - (now - record.lastPostTime)) / 1000);
+    return { allowed: false, error: `心诚则灵，留言请沉思静气。请等待 ${waitSec} 秒后再试` };
+  }
+
+  // Rule 2: 10-minute sliding window max 5 messages
+  if (now - record.windowStart > 10 * 60 * 1000) {
+    record.count = 0;
+    record.windowStart = now;
+  }
+  if (record.count >= 5) {
+    return { allowed: false, error: "您在短时间内留墨较多，工坊已收到您的心意，请稍歇片刻。" };
+  }
+
+  // Rule 3: Deduplication
+  const contentHash = crypto.createHash("md5").update(content.trim()).digest("hex");
+  if (record.lastContentHash === contentHash && (now - record.lastPostTime < 120000)) {
+    return { allowed: false, error: "请勿重复提交相同内容的墨痕。" };
+  }
+
+  // Update record on success
+  record.lastPostTime = now;
+  record.count += 1;
+  record.lastContentHash = contentHash;
+  messageRateMap.set(ip, record);
+
+  // Clean old entries if map grows too large
+  if (messageRateMap.size > 2000) {
+    for (const [k, v] of messageRateMap.entries()) {
+      if (now - v.lastPostTime > 3600000) messageRateMap.delete(k);
+    }
+  }
+
+  return { allowed: true };
 }
 
 // Parse cookies
@@ -112,16 +163,19 @@ function isAuthenticated(req) {
   return false;
 }
 
-// Universal Response Sender with Gzip, ETag & Caching
+// Universal Response Sender with Strict Security Headers, Gzip, ETag & Cache Isolation
 function sendResponse(req, res, statusCode, contentType, body, isCacheable = false) {
   let buffer = Buffer.isBuffer(body) ? body : Buffer.from(typeof body === "string" ? body : JSON.stringify(body), "utf-8");
   const hash = crypto.createHash("md5").update(buffer).digest("hex");
   const etag = `W/"${hash}"`;
 
-  const isAPI = req.url.startsWith("/api") || contentType.includes("json");
+  const pathname = new URL(req.url, `http://${req.headers.host || "localhost"}`).pathname;
+  const isAPI = pathname.startsWith("/api") || contentType.includes("json");
   const isHTML = contentType.includes("text/html");
+  const isDynamicMeta = pathname === "/rss.xml" || pathname === "/sitemap.xml" || pathname === "/robots.txt";
+  const isNeverCache = isAPI || isHTML || isDynamicMeta || pathname === "/sw.js" || pathname.startsWith("/article/");
 
-  if (!isAPI && req.headers["if-none-match"] === etag) {
+  if (!isNeverCache && req.headers["if-none-match"] === etag) {
     res.writeHead(304, {
       "ETag": etag,
       "Cache-Control": isCacheable ? "public, max-age=31536000, immutable" : "no-cache, must-revalidate",
@@ -131,29 +185,33 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
     return;
   }
 
+  // 1. Full Production-Grade Security Headers
   const headers = {
     "Content-Type": contentType,
-    "ETag": etag,
     "Vary": "Accept-Encoding",
-    "X-Content-Type-Options": "nosniff"
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()"
   };
 
-  if (isAPI || isHTML || req.url === '/sw.js' || req.url.startsWith('/sw.js')) {
-    // APIs, HTML pages and Service Worker must NEVER be cached by CDN or browser
-    headers["Cache-Control"] = "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0, s-maxage=0";
-    headers["CDN-Cache-Control"] = "no-store";
-    headers["Cloudflare-CDN-Cache-Control"] = "no-store";
+  // 2. Strict Cache-Busting for HTML, API, RSS & Sitemap
+  if (isNeverCache) {
+    headers["Cache-Control"] = "private, no-cache, no-store, max-age=0, must-revalidate";
+    headers["CDN-Cache-Control"] = "private, no-cache, no-store, max-age=0, must-revalidate";
+    headers["Cloudflare-CDN-Cache-Control"] = "private, no-cache, no-store, max-age=0, must-revalidate";
     headers["Pragma"] = "no-cache";
     headers["Expires"] = "0";
+    headers["ETag"] = `W/"${Date.now()}-${hash.slice(0, 8)}"`; // Dynamic ETag defeats edge proxy stale caching
   } else if (isCacheable) {
-    // Versioned static assets (?v=...) can be cached long-term for max performance
     headers["Cache-Control"] = "public, max-age=31536000, immutable";
     headers["CDN-Cache-Control"] = "max-age=31536000";
     headers["Cloudflare-CDN-Cache-Control"] = "max-age=31536000";
+    headers["ETag"] = etag;
   } else {
-    headers["Cache-Control"] = "no-cache, must-revalidate, max-age=0";
-    headers["CDN-Cache-Control"] = "no-cache";
-    headers["Cloudflare-CDN-Cache-Control"] = "no-cache";
+    headers["Cache-Control"] = "public, max-age=3600";
+    headers["ETag"] = etag;
   }
 
   const acceptEncoding = req.headers["accept-encoding"] || "";
@@ -203,6 +261,164 @@ function parseBody(req) {
   });
 }
 
+// Dynamic RSS 2.0 Generator (Always up to date with 100% articles)
+function generateDynamicRSS() {
+  const articles = readJSON(ARTICLES_FILE, []);
+  const config = getOrInitConfig();
+  const siteUrl = "https://hlat.top";
+
+  const itemsXML = articles.map(art => {
+    const postUrl = `${siteUrl}/article/${art.slug || art.id}`;
+    const pubDate = new Date(art.date || Date.now()).toUTCString();
+    const title = (art.title || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const summary = (art.summary || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const category = (art.category || "随笔").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    return `    <item>
+      <title>${title}</title>
+      <link>${postUrl}</link>
+      <guid isPermaLink="true">${postUrl}</guid>
+      <category>${category}</category>
+      <pubDate>${pubDate}</pubDate>
+      <description><![CDATA[${art.summary || art.title}]]></description>
+      <author>sxtx@hlat.top (${config.author || "Sxltx"})</author>
+    </item>`;
+  }).join("\n");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${config.siteTitle || "Sxltx · 纸境工坊"}</title>
+    <link>${siteUrl}</link>
+    <description>${config.bio || "在微云之境，构筑自治的工程工作流与思想自留地。"}</description>
+    <language>zh-CN</language>
+    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
+    <atom:link href="${siteUrl}/rss.xml" rel="self" type="application/rss+xml"/>
+    <image>
+      <url>${siteUrl}/og/default.png</url>
+      <title>${config.siteTitle || "Sxltx · 纸境工坊"}</title>
+      <link>${siteUrl}</link>
+    </image>
+${itemsXML}
+  </channel>
+</rss>`;
+}
+
+// Dynamic Sitemap Generator
+function generateDynamicSitemap() {
+  const articles = readJSON(ARTICLES_FILE, []);
+  const siteUrl = "https://hlat.top";
+
+  const urlElements = [
+    `  <url>
+    <loc>${siteUrl}/</loc>
+    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>`
+  ];
+
+  articles.forEach(art => {
+    urlElements.push(`  <url>
+    <loc>${siteUrl}/article/${art.slug || art.id}</loc>
+    <lastmod>${art.date || new Date().toISOString().slice(0, 10)}</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+  </url>`);
+  });
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urlElements.join("\n")}
+</urlset>`;
+}
+
+// Dynamic Article Prerender & SEO Injection
+function renderArticlePage(req, res, article) {
+  const indexHtmlPath = path.join(PUBLIC_DIR, "index.html");
+  let html = fs.readFileSync(indexHtmlPath, "utf-8");
+
+  const siteUrl = "https://hlat.top";
+  const postUrl = `${siteUrl}/article/${article.slug || article.id}`;
+  const ogImgUrl = `${siteUrl}/og/${article.slug || article.id}.png`;
+  const cleanTitle = `${article.title} · Sxltx 纸境工坊`;
+  const cleanDesc = article.summary || `${article.title} - Sxltx 的独立个人工坊思考与造物沉淀。`;
+
+  // 1. Dynamic Title
+  html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${cleanTitle}</title>`);
+
+  // 2. Canonical URL (Individually Pointed to This Article)
+  html = html.replace(/<link\s+rel="canonical"\s+href="[^"]*"/i, `<link rel="canonical" href="${postUrl}"`);
+
+  // 3. Meta Description
+  html = html.replace(/<meta\s+name="description"\s+content="[^"]*"/i, `<meta name="description" content="${cleanDesc}">`);
+
+  // 4. OpenGraph Meta Tags
+  html = html.replace(/<meta\s+property="og:url"\s+content="[^"]*"/i, `<meta property="og:url" content="${postUrl}">`);
+  html = html.replace(/<meta\s+property="og:title"\s+content="[^"]*"/i, `<meta property="og:title" content="${cleanTitle}">`);
+  html = html.replace(/<meta\s+property="og:description"\s+content="[^"]*"/i, `<meta property="og:description" content="${cleanDesc}">`);
+  html = html.replace(/<meta\s+property="og:image"\s+content="[^"]*"/i, `<meta property="og:image" content="${ogImgUrl}">`);
+
+  // 5. Twitter Card Meta Tags (1200x630 Large Card)
+  html = html.replace(/<meta\s+name="twitter:card"\s+content="[^"]*"/i, `<meta name="twitter:card" content="summary_large_image">`);
+  html = html.replace(/<meta\s+name="twitter:title"\s+content="[^"]*"/i, `<meta name="twitter:title" content="${cleanTitle}">`);
+  html = html.replace(/<meta\s+name="twitter:description"\s+content="[^"]*"/i, `<meta name="twitter:description" content="${cleanDesc}">`);
+  html = html.replace(/<meta\s+name="twitter:image"\s+content="[^"]*"/i, `<meta name="twitter:image" content="${ogImgUrl}">`);
+
+  // 6. Schema.org BlogPosting Structured Data (Rich Snippets for Google & Bing)
+  const schemaOrg = `
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": ${JSON.stringify(article.title)},
+    "description": ${JSON.stringify(cleanDesc)},
+    "image": ${JSON.stringify(ogImgUrl)},
+    "datePublished": ${JSON.stringify(article.date || "2026-11-04")},
+    "dateModified": ${JSON.stringify(article.date || "2026-11-04")},
+    "author": {
+      "@type": "Person",
+      "name": "Sxltx",
+      "url": "https://hlat.top"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Sxltx · 纸境工坊",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://hlat.top/og/default.png"
+      }
+    },
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": ${JSON.stringify(postUrl)}
+    }
+  }
+  </script>
+  `;
+  html = html.replace("</head>", `${schemaOrg}\n</head>`);
+
+  // 7. Prerender Content into #reader-title, #reader-summary and #reader-content
+  html = html.replace(/<h1[^>]*id="reader-title"[^>]*><\/h1>/i, `<h1 class="drawer-title" id="reader-title">${article.title}</h1>`);
+  html = html.replace(/<p[^>]*id="reader-summary"[^>]*><\/p>/i, `<p class="drawer-summary" id="reader-summary">${article.summary || ''}</p>`);
+
+  const prerenderBody = `
+    <article class="ssr-prerender-article" style="display:block;">
+      <div class="reader-meta-row" style="margin:0.8rem 0 1.2rem;color:var(--text-muted);font-family:var(--font-mono);font-size:0.85rem;">
+        <span class="pill-badge">${article.category || '随笔'}</span> · 
+        <span>${article.date || ''}</span> · 
+        <span>${article.readTime || '5 分钟'}</span>
+      </div>
+      <div class="reader-body">
+        ${article.content.replace(/\n\n/g, '<br><br>')}
+      </div>
+    </article>
+  `;
+  html = html.replace(/<div[^>]*id="reader-content"[^>]*><\/div>/i, `<div class="markdown-rendered-content" id="reader-content">${prerenderBody}</div>`);
+
+  sendResponse(req, res, 200, "text/html; charset=utf-8", html, false);
+}
+
 // MIME Types
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -235,6 +451,29 @@ const server = http.createServer(async (req, res) => {
   const pathname = urlObj.pathname;
   const method = req.method;
 
+  // 1. Dynamic RSS Feed (Real-time, Never Cached by Proxy)
+  if (pathname === "/rss.xml" && method === "GET") {
+    const rssContent = generateDynamicRSS();
+    return sendResponse(req, res, 200, "application/xml; charset=utf-8", rssContent, false);
+  }
+
+  // 2. Dynamic Sitemap
+  if (pathname === "/sitemap.xml" && method === "GET") {
+    const sitemapContent = generateDynamicSitemap();
+    return sendResponse(req, res, 200, "application/xml; charset=utf-8", sitemapContent, false);
+  }
+
+  // 3. Article Direct SSR Route (/article/:slug)
+  const articleRouteMatch = pathname.match(/^\/article\/([^/]+)$/);
+  if (articleRouteMatch && method === "GET") {
+    const slug = decodeURIComponent(articleRouteMatch[1]);
+    const articles = readJSON(ARTICLES_FILE, []);
+    const art = articles.find(a => (a.slug && a.slug === slug) || a.id === slug);
+    if (art) {
+      return renderArticlePage(req, res, art);
+    }
+  }
+
   // API Routes
   // 1. Auth Status
   if (pathname === "/api/auth/status" && method === "GET") {
@@ -257,10 +496,6 @@ const server = http.createServer(async (req, res) => {
 
   // 3. Auth Logout
   if (pathname === "/api/auth/logout" && method === "POST") {
-    const cookies = parseCookies(req.headers["cookie"]);
-    if (cookies["atelier_session"]) {
-      // Stateless token - cookie cleared by Set-Cookie
-    }
     res.setHeader("Set-Cookie", "atelier_session=; Path=/; HttpOnly; Max-Age=0");
     return sendJSON(req, res, 200, { ok: true });
   }
@@ -289,7 +524,7 @@ const server = http.createServer(async (req, res) => {
         bio: config.bio || "",
         stampText: config.stampText || "纸境\nATELIER"
       };
-      return sendJSON(req, res, 200, publicConfig, true);
+      return sendJSON(req, res, 200, publicConfig, false);
     }
     if (method === "POST") {
       if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
@@ -402,31 +637,31 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(req, res, 200, { ok: true });
   }
 
-  
-function generateSmartEcho(content, author) {
-  const text = (content || "").toLowerCase();
-  let echoContent = "";
-  
-  if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
-    echoContent = "见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。";
-  } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络")) {
-    echoContent = "同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。";
-  } else if (text.includes("生活") || text.includes("加油") || text.includes("坚持") || text.includes("心境") || text.includes("思考") || text.includes("迷茫") || text.includes("未来") || text.includes("岁月") || text.includes("时间")) {
-    echoContent = "纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。";
-  } else if (text.includes("你好") || text.includes("hello") || text.includes("hi") || text.includes("支持") || text.includes("逛逛") || text.includes("打卡") || text.includes("来看看") || text.includes("路过")) {
-    echoContent = "山川辽阔，比特相连。感谢旅人驻足留墨，数字世界的这一隅自留地，随时欢迎您常来坐坐。";
-  } else {
-    echoContent = "感谢旅人驻足留墨。微云过隙，字有余温。在数字世界的这一隅自留地，很荣幸与您的思想产生共振。";
+  // Smart Echo Generator for Guestbook
+  function generateSmartEcho(content, author) {
+    const text = (content || "").toLowerCase();
+    let echoContent = "";
+    
+    if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
+      echoContent = "见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。";
+    } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络")) {
+      echoContent = "同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。";
+    } else if (text.includes("生活") || text.includes("加油") || text.includes("坚持") || text.includes("心境") || text.includes("思考") || text.includes("迷茫") || text.includes("未来") || text.includes("岁月") || text.includes("时间")) {
+      echoContent = "纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。";
+    } else if (text.includes("你好") || text.includes("hello") || text.includes("hi") || text.includes("支持") || text.includes("逛逛") || text.includes("打卡") || text.includes("来看看") || text.includes("路过")) {
+      echoContent = "山川辽阔，比特相连。感谢旅人驻足留墨，数字世界的这一隅自留地，随时欢迎您常来坐坐。";
+    } else {
+      echoContent = "感谢旅人驻足留墨。微云过隙，字有余温。在数字世界的这一隅自留地，很荣幸与您的思想产生共振。";
+    }
+
+    return {
+      author: "工坊回笔",
+      content: echoContent,
+      time: new Date().toISOString()
+    };
   }
 
-  return {
-    author: "工坊回笔",
-    content: echoContent,
-    time: new Date().toISOString()
-  };
-}
-
-// 8. Messages (Guestbook) API
+  // 8. Messages (Guestbook) API with Advanced Anti-Spam Rate Limiting & Honeypot
   if (pathname === "/api/messages") {
     if (method === "GET") {
       const messages = readJSON(MESSAGES_FILE, []);
@@ -434,9 +669,23 @@ function generateSmartEcho(content, author) {
     }
     if (method === "POST") {
       const body = await parseBody(req);
+      
+      // Honeypot Protection: Bots usually auto-fill hidden input fields
+      if (body.website || body.honeypot || body.hp_token) {
+        console.warn(`[AntiSpam] Bot detected via honeypot from ${getClientIP(req)}`);
+        return sendJSON(req, res, 200, { ok: true, message: { id: "bot_ignored" } }); // Silent discard
+      }
+
       if (!body.content || !body.content.trim()) {
         return sendJSON(req, res, 400, { ok: false, error: "留言内容不能为空" });
       }
+
+      const clientIP = getClientIP(req);
+      const rateCheck = checkMessageRateLimit(clientIP, body.content);
+      if (!rateCheck.allowed) {
+        return sendJSON(req, res, 429, { ok: false, error: rateCheck.error });
+      }
+
       const messages = readJSON(MESSAGES_FILE, []);
       const newMsg = {
         id: "msg_" + Date.now().toString(36),
@@ -452,7 +701,7 @@ function generateSmartEcho(content, author) {
     }
   }
 
-    // Message Reply API (Owner/Admin reply to visitor message)
+  // Message Reply API
   const msgReplyMatch = pathname.match(/^\/api\/messages\/([^/]+)\/reply$/);
   if (msgReplyMatch && (method === "POST" || method === "PUT")) {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
@@ -489,7 +738,7 @@ function generateSmartEcho(content, author) {
     return sendJSON(req, res, 200, { ok: true });
   }
 
-  // 9. Status API (Privacy Guarded - NO PROXY DATA)
+  // 9. Status API
   if (pathname === "/api/status" && method === "GET") {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
@@ -523,8 +772,8 @@ function generateSmartEcho(content, author) {
 
   // Static File Serving
   let relativePath = pathname === "/" ? "index.html" : pathname;
-  // Fallback for SPA routing /admin, /article/*
-  if (pathname === "/admin" || pathname.startsWith("/article/")) {
+  // Fallback for SPA routing /admin
+  if (pathname === "/admin") {
     relativePath = "index.html";
   }
 
@@ -536,7 +785,7 @@ function generateSmartEcho(content, author) {
   if (fs.existsSync(filePath)) {
     const ext = path.extname(filePath).toLowerCase();
     const mime = MIME_TYPES[ext] || "application/octet-stream";
-    const isDynamicMeta = pathname === '/sitemap.xml' || pathname === '/robots.txt' || pathname === '/rss.xml';
+    const isDynamicMeta = pathname === "/sitemap.xml" || pathname === "/robots.txt" || pathname === "/rss.xml";
     const isCacheable = ext !== ".html" && pathname !== "/sw.js" && !isDynamicMeta;
     fs.readFile(filePath, (err, content) => {
       if (err) {

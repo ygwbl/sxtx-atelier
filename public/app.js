@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v13';
+const CURRENT_RELEASE_VER = '20261104_v14';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -353,6 +353,7 @@ async function fetchArticles() {
       renderArticles();
       updateStudioArticlesList();
       updateTimelineStats();
+      checkInitialArticleRoute();
     }
   } catch (e) {}
 }
@@ -550,6 +551,12 @@ function updateTimelineStats() {
 // --------------------------------------------------------------------------
 function openReader(article) {
   activeQuoteArticle = article;
+  try {
+    const slug = article.slug || article.id;
+    if (window.location.pathname !== `/article/${slug}`) {
+      window.history.pushState({ articleSlug: slug }, '', `/article/${slug}`);
+    }
+  } catch (e) {}
   const overlay = document.getElementById('reader-overlay');
   const drawer = document.getElementById('reader-drawer');
   const catEl = document.getElementById('reader-category');
@@ -792,6 +799,11 @@ function openReader(article) {
 }
 
 function closeReader() {
+  try {
+    if (window.location.pathname.startsWith('/article/')) {
+      window.history.pushState({}, '', '/');
+    }
+  } catch (e) {}
   const overlay = document.getElementById('reader-overlay');
   overlay.style.display = 'none';
   document.body.style.overflow = '';
@@ -1669,8 +1681,20 @@ const THEME_NAMES = {
 };
 
 function initTheme() {
-  const saved = localStorage.getItem('sxtx-atelier-theme') || 'paper';
-  setTheme(saved, false);
+  const saved = localStorage.getItem('sxtx-atelier-theme');
+  if (saved) {
+    setTheme(saved, false);
+  } else {
+    // 自然时辰感知：戌时至卯时初(20:00~06:00)或系统暗色偏好，自动开启玄青夜读模式
+    const hour = new Date().getHours();
+    const isNight = hour >= 20 || hour < 6;
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (isNight || prefersDark) {
+      setTheme('dark', false);
+    } else {
+      setTheme('paper', false);
+    }
+  }
 
   const toggleBtn = document.getElementById('btn-theme-toggle');
   if (toggleBtn) {

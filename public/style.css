@@ -23,9 +23,9 @@
   --brand-emerald: #059669;
   --brand-emerald-bg: rgba(5, 150, 105, 0.08);
 
-  --font-serif: 'Lora', 'Noto Serif SC', Georgia, serif;
-  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
+  --font-serif: -apple-system-ui-serif, 'Lora', 'Songti SC', 'Noto Serif CJK SC', 'Source Han Serif SC', 'Source Han Serif CN', 'STSong', 'SimSun-ExtB', 'SimSun', serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Plus Jakarta Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', Menlo, Monaco, Consolas, monospace;
 
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
   --transition-fast: 160ms var(--ease-spring);
