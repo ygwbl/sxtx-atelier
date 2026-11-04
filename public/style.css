@@ -3940,3 +3940,43 @@ html, body {
     -webkit-overflow-scrolling: touch !important;
   }
 }
+
+
+/* ==========================================================================
+   2026.11.04 CRITICAL FIX: MOBILE CROSS-AXIS STRETCH & HORIZONTAL CONTAINMENT
+   ========================================================================== */
+.reader-layout-wrap {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 959px) {
+  .reader-layout-wrap {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important; /* Critical: flexbox cross-axis stretch prevents max-content overflow */
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .drawer-article-body {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .drawer-title,
+  .drawer-summary,
+  .markdown-rendered-content,
+  #reader-content,
+  .ai-insight-card {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+  }
+}

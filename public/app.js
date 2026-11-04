@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v3';
+const CURRENT_RELEASE_VER = '20261104_v4';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -617,6 +617,22 @@ function openReader(article) {
   } else {
     if (desktopTocRail) desktopTocRail.innerHTML = '';
     if (mobileTocSlot) mobileTocSlot.innerHTML = '';
+  }
+
+    // Enforce mobile cross-axis stretch & containment
+  const articleBodyEl = drawer.querySelector('.drawer-article-body');
+  if (articleBodyEl) {
+    articleBodyEl.style.width = '100%';
+    articleBodyEl.style.maxWidth = '100%';
+    articleBodyEl.style.minWidth = '0';
+    articleBodyEl.style.boxSizing = 'border-box';
+  }
+  const layoutWrapEl = drawer.querySelector('.reader-layout-wrap');
+  if (layoutWrapEl && window.innerWidth < 960) {
+    layoutWrapEl.style.alignItems = 'stretch';
+    layoutWrapEl.style.width = '100%';
+    layoutWrapEl.style.maxWidth = '100%';
+    layoutWrapEl.style.boxSizing = 'border-box';
   }
 
   overlay.style.display = 'flex';
