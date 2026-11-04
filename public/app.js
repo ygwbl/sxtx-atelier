@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v19';
+const CURRENT_RELEASE_VER = '20261104_v20';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -512,28 +512,48 @@ function renderMessages() {
     return;
   }
 
-  container.innerHTML = messages.map(msg => `
-    <div class="message-card">
-      <p class="msg-body">${escapeHtml(msg.content)}</p>
-      <div class="msg-meta">
-        <span class="msg-author">墨友 · ${escapeHtml(msg.author || '墨友')}</span>
-        <span class="msg-time">${formatRelativeTime(msg.time)}</span>
-      </div>
-      ${msg.echo ? `
-        <div class="msg-echo-box">
-          <div class="echo-header">
-            <span class="echo-tag">
-              <svg style="width:12px;height:12px;display:inline-block;vertical-align:-1px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-              ${escapeHtml(msg.echo.author || '工坊回笔')}
-            </span>
-            <span class="echo-badge-seal">主理人</span>
-            <span class="echo-time">${formatRelativeTime(msg.echo.time)}</span>
+  container.innerHTML = messages.map(msg => {
+    const authorName = (msg.author || '墨友').trim();
+    const initialChar = authorName.charAt(0) || '墨';
+
+    return `
+      <div class="message-card" data-id="${escapeHtml(msg.id)}">
+        <!-- Guest Header: Avatar + Author + Relative Time -->
+        <div class="msg-card-header">
+          <div class="msg-sender-info">
+            <div class="msg-guest-avatar" title="${escapeHtml(authorName)}">${escapeHtml(initialChar)}</div>
+            <div class="msg-author-wrap">
+              <span class="msg-author-name">${escapeHtml(authorName)}</span>
+              <span class="msg-role-tag">墨友</span>
+            </div>
           </div>
-          <p class="echo-body">${escapeHtml(msg.echo.content)}</p>
+          <time class="msg-time mono">${formatRelativeTime(msg.time)}</time>
         </div>
-      ` : ''}
-    </div>
-  `).join('');
+
+        <!-- Guest Content Body -->
+        <div class="msg-body">
+          <p class="msg-text">${escapeHtml(msg.content)}</p>
+        </div>
+
+        <!-- Atelier Echo / Response (Threaded Reply) -->
+        ${msg.echo ? `
+          <div class="msg-echo-box">
+            <div class="echo-header">
+              <div class="echo-sender">
+                <img src="/logo.png?v=20261104_v20" alt="工坊主理人" class="echo-avatar" loading="lazy">
+                <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
+                <span class="echo-badge-seal">主理人</span>
+              </div>
+              <time class="echo-time mono">${formatRelativeTime(msg.echo.time)}</time>
+            </div>
+            <div class="echo-body">
+              <p class="echo-text">${escapeHtml(msg.echo.content)}</p>
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
 }
 
 // Timeline Summary Stats Updater

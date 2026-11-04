@@ -4979,3 +4979,304 @@ body.ink-dark-mode .fb-dark-img {
   background: var(--bg-paper) !important;
   color: var(--text-title) !important;
 }
+
+/* ==========================================================================
+   2026.11.04 NEW: STUDIO GRADE GUESTBOOK WATERFALL & THREADED CARDS
+   ========================================================================== */
+
+/* 1. Masonry Waterfall Wall (Zero empty vertical holes) */
+.messages-wall {
+  display: block !important;
+  columns: 3 280px !important;
+  column-gap: 1.25rem !important;
+  width: 100% !important;
+}
+
+@media (max-width: 992px) {
+  .messages-wall {
+    columns: 2 260px !important;
+    column-gap: 1rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .messages-wall {
+    columns: 1 !important;
+    column-gap: 0 !important;
+  }
+}
+
+/* 2. Message Card Base */
+.message-card {
+  break-inside: avoid !important;
+  page-break-inside: avoid;
+  margin-bottom: 1.25rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+  gap: 0.85rem !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-line) !important;
+  border-radius: 12px !important;
+  padding: 1.15rem 1.25rem !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+.message-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(184, 59, 59, 0.28) !important;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* 3. Guest Header: Sender Info & Time */
+.msg-card-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.5rem !important;
+  padding-bottom: 0.55rem !important;
+  border-bottom: 1px dashed var(--border-subtle, rgba(0, 0, 0, 0.08)) !important;
+}
+
+.msg-sender-info {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.55rem !important;
+  min-width: 0 !important;
+}
+
+.msg-guest-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.02)) !important;
+  border: 1px solid var(--border-line, rgba(0, 0, 0, 0.08)) !important;
+  color: var(--text-title) !important;
+  font-family: var(--font-serif) !important;
+  font-size: 0.78rem !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  text-transform: uppercase !important;
+  user-select: none !important;
+}
+
+[data-theme="dark"] .msg-guest-avatar,
+body.theme-dark .msg-guest-avatar {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: var(--text-title) !important;
+}
+
+.msg-author-wrap {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  min-width: 0 !important;
+}
+
+.msg-author-name {
+  font-weight: 600 !important;
+  font-size: 0.88rem !important;
+  color: var(--text-title) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  letter-spacing: -0.01em !important;
+}
+
+.msg-role-tag {
+  font-size: 0.65rem !important;
+  color: var(--text-muted) !important;
+  background: rgba(0, 0, 0, 0.04) !important;
+  padding: 0.08rem 0.35rem !important;
+  border-radius: 3px !important;
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+
+[data-theme="dark"] .msg-role-tag,
+body.theme-dark .msg-role-tag {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--text-faint) !important;
+}
+
+.msg-time {
+  font-size: 0.72rem !important;
+  color: var(--text-muted) !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.msg-body {
+  margin: 0 !important;
+  padding: 0.15rem 0 !important;
+}
+
+.msg-text {
+  margin: 0 !important;
+  font-size: 0.92rem !important;
+  line-height: 1.65 !important;
+  color: var(--text-title) !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* 4. Threaded Echo / Response Box */
+.msg-echo-box {
+  margin-top: 0.45rem !important;
+  padding: 0.85rem 1rem !important;
+  background: rgba(184, 59, 59, 0.035) !important;
+  border: 1px solid rgba(184, 59, 59, 0.14) !important;
+  border-left: 3.5px solid var(--brand-seal, #b83b3b) !important;
+  border-radius: 8px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.5rem !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+[data-theme="dark"] .msg-echo-box,
+body.theme-dark .msg-echo-box {
+  background: rgba(184, 59, 59, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-left-color: var(--brand-seal, #cf5d5d) !important;
+}
+
+.echo-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.5rem !important;
+  margin-bottom: 0 !important;
+}
+
+.echo-sender {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  min-width: 0 !important;
+}
+
+.echo-avatar {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 1.2px solid rgba(184, 59, 59, 0.35) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+  flex-shrink: 0 !important;
+}
+
+.echo-author-name {
+  font-family: var(--font-serif) !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: var(--brand-seal, #b83b3b) !important;
+  letter-spacing: -0.01em !important;
+  white-space: nowrap !important;
+}
+
+[data-theme="dark"] .echo-author-name,
+body.theme-dark .echo-author-name {
+  color: #f87171 !important;
+}
+
+.echo-badge-seal {
+  font-size: 0.62rem !important;
+  font-weight: 600 !important;
+  padding: 0.08rem 0.36rem !important;
+  border-radius: 3px !important;
+  background: rgba(184, 59, 59, 0.08) !important;
+  color: var(--brand-seal, #b83b3b) !important;
+  border: 1px solid rgba(184, 59, 59, 0.28) !important;
+  line-height: 1.2 !important;
+  letter-spacing: 0.03em !important;
+  white-space: nowrap !important;
+  margin-left: 0 !important;
+}
+
+[data-theme="dark"] .echo-badge-seal,
+body.theme-dark .echo-badge-seal {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: #fca5a5 !important;
+  border-color: rgba(239, 68, 68, 0.35) !important;
+}
+
+.echo-time {
+  font-size: 0.7rem !important;
+  color: var(--text-muted) !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.echo-body {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.echo-text {
+  margin: 0 !important;
+  font-size: 0.86rem !important;
+  line-height: 1.62 !important;
+  color: var(--text-secondary) !important;
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+}
+
+/* 5. Nav Brand Logo & Hero Avatar Badge */
+.nav-brand-logo {
+  width: 26px !important;
+  height: 26px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 1.5px solid var(--border-line, rgba(0, 0, 0, 0.1)) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s ease !important;
+  flex-shrink: 0 !important;
+  margin-right: 0.2rem !important;
+}
+
+.nav-brand:hover .nav-brand-logo {
+  transform: rotate(8deg) scale(1.1) !important;
+  border-color: var(--brand-seal, #b83b3b) !important;
+}
+
+.hero-brand-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  margin-bottom: 1.25rem !important;
+  flex-wrap: wrap !important;
+}
+
+.hero-brand-avatar {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  padding: 2px !important;
+  background: linear-gradient(135deg, rgba(184, 59, 59, 0.4), rgba(184, 59, 59, 0.08)) !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06) !important;
+  flex-shrink: 0 !important;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease !important;
+  cursor: pointer;
+}
+
+.hero-brand-avatar:hover {
+  transform: scale(1.08) rotate(4deg) !important;
+  box-shadow: 0 4px 16px rgba(184, 59, 59, 0.22) !important;
+}
+
+.hero-avatar-img {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  display: block !important;
+}
