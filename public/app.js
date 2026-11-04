@@ -2159,8 +2159,6 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  if ('serviceWorker' in navigator) {
-    
   // Discreet Admin Studio Triggers
   document.getElementById('footer-admin-trigger')?.addEventListener('click', openAdminModal);
 
@@ -2181,6 +2179,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (window.location.hash === '#admin') openAdminModal();
   });
 
+  // Aggressive Service Worker Unregister & Purge
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.getRegistrations().then((regs) => {
       for (let reg of regs) {
