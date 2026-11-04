@@ -3776,3 +3776,167 @@ html, body {
     justify-content: flex-start;
   }
 }
+
+
+/* ==========================================================================
+   2026.11.04 COMPREHENSIVE MOBILE ADAPTATION & TOC REFINEMENTS
+   ========================================================================== */
+
+/* 1. Desktop vs Mobile TOC Layout Rules */
+@media (min-width: 960px) {
+  .reader-desktop-sidebar {
+    display: block !important;
+    width: 210px !important;
+    flex-shrink: 0 !important;
+    position: sticky !important;
+    top: 1.5rem !important;
+  }
+  .reader-mobile-toc-slot {
+    display: none !important;
+  }
+}
+
+@media (max-width: 959px) {
+  .reader-desktop-sidebar {
+    display: none !important;
+  }
+  .reader-mobile-toc-slot {
+    display: block !important;
+    margin: 1.15rem 0 1rem 0 !important;
+  }
+  .reader-mobile-toc-details {
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-line) !important;
+    border-left: 3px solid var(--accent-seal, #b83b3b) !important;
+    border-radius: 4px !important;
+    padding: 0.65rem 0.95rem !important;
+    box-shadow: var(--shadow-sm) !important;
+  }
+  .reader-mobile-toc-summary {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    cursor: pointer !important;
+    list-style: none !important;
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    color: var(--text-title) !important;
+    user-select: none !important;
+  }
+  .reader-mobile-toc-summary::-webkit-details-marker {
+    display: none !important;
+  }
+  .mobile-toc-badge {
+    display: flex !important;
+    align-items: center !important;
+    color: var(--text-title) !important;
+  }
+  .mobile-toc-arrow {
+    font-size: 0.85rem !important;
+    color: var(--text-muted) !important;
+    transition: transform 0.2s ease !important;
+  }
+  .reader-mobile-toc-details[open] .mobile-toc-arrow {
+    transform: rotate(180deg) !important;
+  }
+  .mobile-toc-list {
+    list-style: none !important;
+    padding: 0.65rem 0 0.25rem 0.5rem !important;
+    margin: 0.5rem 0 0 0 !important;
+    border-top: 1px dashed var(--border-subtle) !important;
+  }
+  .mobile-toc-list .reader-toc-item {
+    padding: 0.4rem 0 !important;
+    font-size: 0.85rem !important;
+    color: var(--text-secondary) !important;
+    display: flex !important;
+    align-items: baseline !important;
+    gap: 0.45rem !important;
+    cursor: pointer !important;
+  }
+  .mobile-toc-list .reader-toc-item.level-sub {
+    padding-left: 0.85rem !important;
+    font-size: 0.8rem !important;
+    opacity: 0.9 !important;
+  }
+  .mobile-toc-list .reader-toc-item:active {
+    color: var(--accent-seal, #b83b3b) !important;
+  }
+}
+
+/* 2. Mobile Article Header & AI Insight Card Polish */
+@media (max-width: 640px) {
+  .drawer-toolbar {
+    padding: 0.65rem 0.85rem !important;
+  }
+  .drawer-cat-badge {
+    font-size: 0.72rem !important;
+    padding: 0.15rem 0.4rem !important;
+  }
+  .drawer-date, .drawer-read-time {
+    font-size: 0.72rem !important;
+  }
+  .drawer-title {
+    font-size: 1.35rem !important;
+    line-height: 1.35 !important;
+    margin: 0.4rem 0 0.75rem 0 !important;
+    word-break: break-word !important;
+  }
+  .drawer-summary {
+    font-size: 0.88rem !important;
+    line-height: 1.65 !important;
+    margin-bottom: 0.65rem !important;
+  }
+  .drawer-content-scroll {
+    padding: 0.85rem 1rem 3.5rem !important;
+  }
+  
+  /* AI Insight Card: Stack vertically to prevent horizontal clipping */
+  .ai-insight-card {
+    padding: 0.85rem 1rem !important;
+    margin: 1.15rem 0 1.5rem 0 !important;
+  }
+  .ai-insight-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+    margin-bottom: 0.65rem !important;
+    padding-bottom: 0.5rem !important;
+    border-bottom: 1px dashed var(--border-line) !important;
+  }
+  .ai-insight-badge {
+    font-size: 0.84rem !important;
+    white-space: nowrap !important;
+    gap: 0.4rem !important;
+  }
+  .ai-insight-meta {
+    width: 100% !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 0.35rem !important;
+    justify-content: flex-start !important;
+  }
+  .ai-chip {
+    font-size: 0.72rem !important;
+    padding: 0.15rem 0.45rem !important;
+    white-space: nowrap !important;
+  }
+  .ai-insight-list {
+    padding-left: 1rem !important;
+    margin-top: 0.45rem !important;
+  }
+  .ai-insight-list li {
+    font-size: 0.82rem !important;
+    line-height: 1.6 !important;
+    margin-bottom: 0.35rem !important;
+  }
+
+  /* Code Block Horizontal Scroll on Mobile */
+  .code-block-wrapper pre {
+    font-size: 0.76rem !important;
+    padding: 0.75rem !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+}

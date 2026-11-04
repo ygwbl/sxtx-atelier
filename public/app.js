@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v2';
+const CURRENT_RELEASE_VER = '20261104_v3';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -538,12 +538,13 @@ function openReader(article) {
     };
   });
 
-  // Build Dynamic Table of Contents (TOC) - Single Left Sidebar only, removed from article body
+  // Build Dynamic Table of Contents (TOC) - Desktop Sidebar + Mobile Adaptive Accordion
   const headings = contentEl.querySelectorAll('h2, h3');
-  // Ensure any legacy inline toc in content is completely wiped out
   contentEl.querySelectorAll('.reader-toc-container').forEach(el => el.remove());
 
   const desktopTocRail = document.getElementById('reader-desktop-sidebar');
+  const mobileTocSlot = document.getElementById('reader-mobile-toc-slot');
+
   if (headings.length >= 2) {
     const hasH2 = Array.from(headings).some(h => h.tagName.toLowerCase() === 'h2');
     let tocListHtml = '';
@@ -559,6 +560,7 @@ function openReader(article) {
       `;
     });
 
+    // 1. Desktop Left Rail
     if (desktopTocRail) {
       desktopTocRail.innerHTML = `
         <div class="desktop-sidebar-inner">
@@ -577,13 +579,44 @@ function openReader(article) {
           const targetId = item.getAttribute('data-target');
           const targetEl = document.getElementById(targetId);
           if (targetEl && scrollContainer) {
-            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            targetEl.scrollIntoView({ behavior: 'smooth' });
+          }
+        };
+      });
+    }
+
+    // 2. Mobile Collapsible Accordion (below summary, above content!)
+    if (mobileTocSlot) {
+      mobileTocSlot.innerHTML = `
+        <details class="reader-mobile-toc-details">
+          <summary class="reader-mobile-toc-summary">
+            <span class="mobile-toc-badge">
+              <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;margin-right:6px;"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line></svg>
+              <span>导读脉络 (${headings.length} 节)</span>
+            </span>
+            <span class="mobile-toc-arrow">▾</span>
+          </summary>
+          <ul class="mobile-toc-list">
+            ${tocListHtml}
+          </ul>
+        </details>
+      `;
+      mobileTocSlot.querySelectorAll('.reader-toc-item').forEach(item => {
+        item.onclick = (e) => {
+          e.stopPropagation();
+          const targetId = item.getAttribute('data-target');
+          const targetEl = document.getElementById(targetId);
+          const details = mobileTocSlot.querySelector('details');
+          if (details) details.removeAttribute('open');
+          if (targetEl && scrollContainer) {
+            targetEl.scrollIntoView({ behavior: 'smooth' });
           }
         };
       });
     }
   } else {
     if (desktopTocRail) desktopTocRail.innerHTML = '';
+    if (mobileTocSlot) mobileTocSlot.innerHTML = '';
   }
 
   overlay.style.display = 'flex';

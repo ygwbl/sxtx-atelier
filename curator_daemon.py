@@ -260,7 +260,7 @@ def check_and_publish_daily():
     formatted_paragraphs = []
     for p_text in candidate["paragraphs"]:
         clean_text = p_text.strip().lstrip("　 \t")
-        p_html = f'<p style="text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;">　　{clean_text}</p>'
+        p_html = f'<p style="text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;">{clean_text}</p>'
         formatted_paragraphs.append(p_html)
         
     article_content = "\n\n".join(formatted_paragraphs)
@@ -272,7 +272,7 @@ def check_and_publish_daily():
         "category": candidate["category"],
         "date": today_str,
         "readTime": candidate["readTime"],
-        "summary": "　　" + candidate["summary"].strip().lstrip("　 \t"),
+        "summary": "" + candidate["summary"].strip().lstrip("　 \t"),
         "density": candidate["density"],
         "insights": candidate["insights"],
         "content": article_content
