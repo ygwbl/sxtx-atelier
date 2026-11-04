@@ -522,7 +522,9 @@ const server = http.createServer(async (req, res) => {
         siteSubtitle: config.siteSubtitle || "",
         author: config.author || "Sxltx",
         bio: config.bio || "",
-        stampText: config.stampText || "纸境\nATELIER"
+        stampText: config.stampText || "纸境\nATELIER",
+        hasGlmKey: !!(config.glmApiKey || process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY),
+        glmApiKeyMasked: config.glmApiKey ? (config.glmApiKey.slice(0, 4) + '••••' + config.glmApiKey.slice(-4)) : ''
       };
       return sendJSON(req, res, 200, publicConfig, false);
     }
@@ -535,6 +537,7 @@ const server = http.createServer(async (req, res) => {
       if (body.author) config.author = String(body.author).slice(0, 50);
       if (body.bio !== undefined) config.bio = String(body.bio).slice(0, 500);
       if (body.stampText !== undefined) config.stampText = String(body.stampText).slice(0, 30);
+      if (body.glmApiKey !== undefined) config.glmApiKey = String(body.glmApiKey).trim();
       writeJSON(CONFIG_FILE, config);
       return sendJSON(req, res, 200, { ok: true, config });
     }
@@ -637,14 +640,61 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(req, res, 200, { ok: true });
   }
 
-  // Smart Echo Generator for Guestbook
-  function generateSmartEcho(content, author) {
+  // Smart Echo Generator for Guestbook (Supports GLM-4-Flash & Local Semantic Engine)
+  async function generateSmartEcho(content, author) {
     const text = (content || "").toLowerCase();
+    const config = getOrInitConfig();
+    const glmKey = process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || config.glmApiKey;
+
+    if (glmKey) {
+      try {
+        const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${glmKey.trim()}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            model: "glm-4-flash",
+            messages: [
+              {
+                role: "system",
+                content: "你是「纸境工坊」的AI主理人Sxltx。请用具有东方纸境美学、温润、克制且真诚的文风（60-120字），回复访客在工坊留言薄上的留墨。避免浮夸营销或生硬套话，像在安静的书斋里给推门而入的客人体面奉茶回笔。"
+              },
+              {
+                role: "user",
+                content: `访客称谓：${author || '墨友'}\n留墨内容：${content}`
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 250
+          }),
+          signal: AbortSignal.timeout(5000)
+        });
+
+        if (resp.ok) {
+          const data = await resp.json();
+          const aiReply = data?.choices?.[0]?.message?.content?.trim();
+          if (aiReply) {
+            return {
+              author: "工坊回笔 · GLM",
+              content: aiReply,
+              time: new Date().toISOString()
+            };
+          }
+        } else {
+          console.warn("[GLM] API call failed with status", resp.status);
+        }
+      } catch (err) {
+        console.warn("[GLM] Error invoking GLM API:", err.message);
+      }
+    }
+
+    // Fallback: Local Semantic Intent Matching Engine
     let echoContent = "";
-    
     if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
       echoContent = "见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。";
-    } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络")) {
+    } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络") || text.includes("cdn") || text.includes("缓存")) {
       echoContent = "同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。";
     } else if (text.includes("生活") || text.includes("加油") || text.includes("坚持") || text.includes("心境") || text.includes("思考") || text.includes("迷茫") || text.includes("未来") || text.includes("岁月") || text.includes("时间")) {
       echoContent = "纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。";
@@ -687,12 +737,13 @@ const server = http.createServer(async (req, res) => {
       }
 
       const messages = readJSON(MESSAGES_FILE, []);
+      const echoData = await generateSmartEcho(body.content, body.author);
       const newMsg = {
         id: "msg_" + Date.now().toString(36),
         author: body.author ? String(body.author).trim().slice(0, 30) : "无名墨友",
         content: String(body.content).trim().slice(0, 500),
         time: new Date().toISOString(),
-        echo: generateSmartEcho(body.content, body.author)
+        echo: echoData
       };
       messages.unshift(newMsg);
       if (messages.length > 200) messages.length = 200;

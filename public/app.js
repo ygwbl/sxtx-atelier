@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v15';
+const CURRENT_RELEASE_VER = '20261104_v16';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -524,8 +524,9 @@ function renderMessages() {
           <div class="echo-header">
             <span class="echo-tag">
               <svg style="width:12px;height:12px;display:inline-block;vertical-align:-1px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
-              工坊回笔
+              ${escapeHtml(msg.echo.author || '工坊回笔')}
             </span>
+            <span class="echo-badge-seal">主理人</span>
             <span class="echo-time">${formatRelativeTime(msg.echo.time)}</span>
           </div>
           <p class="echo-body">${escapeHtml(msg.echo.content)}</p>
@@ -1381,10 +1382,18 @@ function loadConfigIntoSettingsForm() {
   const titleInput = document.getElementById('cfg-site-title');
   const bioInput = document.getElementById('cfg-site-bio');
   const stampInput = document.getElementById('cfg-stamp-text');
+  const glmKeyInput = document.getElementById('cfg-glm-key');
 
   if (titleInput) titleInput.value = cfg.siteTitle || '';
   if (bioInput) bioInput.value = cfg.bio || '';
   if (stampInput) stampInput.value = cfg.stampText || '纸境\nATELIER';
+  if (glmKeyInput) {
+    if (cfg.hasGlmKey) {
+      glmKeyInput.placeholder = `已激活智谱 GLM 大模型 (${cfg.glmApiKeyMasked || '已连接'})`;
+    } else {
+      glmKeyInput.placeholder = '粘贴 API Key（未填则使用本地高情商意图引擎）';
+    }
+  }
 }
 
 // Save Config Form
@@ -1393,18 +1402,27 @@ document.getElementById('form-site-config')?.addEventListener('submit', async (e
   const siteTitle = document.getElementById('cfg-site-title').value.trim();
   const bio = document.getElementById('cfg-site-bio').value.trim();
   const stampText = document.getElementById('cfg-stamp-text').value.trim();
+  const glmKeyInput = document.getElementById('cfg-glm-key');
+  const glmApiKey = glmKeyInput ? glmKeyInput.value.trim() : undefined;
+
+  const payload = { siteTitle, bio, stampText };
+  if (glmApiKey) payload.glmApiKey = glmApiKey;
 
   try {
     const res = await fetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ siteTitle, bio, stampText })
+      body: JSON.stringify(payload)
     });
     const data = await res.json();
     if (data.ok) {
-      showToast('工坊资料已更新');
+      showToast('工坊资料与 AI 设置已更新');
       siteConfig = data.config;
       applyConfig(siteConfig);
+      if (glmKeyInput && glmApiKey) {
+        glmKeyInput.value = '';
+        glmKeyInput.placeholder = '已成功激活智谱 GLM 大模型回笔 ✦';
+      }
     }
   } catch (e) {
     showToast('更新失败');
@@ -1438,8 +1456,24 @@ document.getElementById('form-change-pwd')?.addEventListener('submit', async (e)
 });
 
 // --------------------------------------------------------------------------
-// 6. Guestbook Submission
+// 6. Guestbook Submission & Live Character Counter (Artalk Inspired)
 // --------------------------------------------------------------------------
+const msgContentInput = document.getElementById('msg-content');
+const charCountEl = document.getElementById('msg-char-count');
+if (msgContentInput && charCountEl) {
+  msgContentInput.addEventListener('input', () => {
+    const len = msgContentInput.value.length;
+    charCountEl.textContent = `${len} / 300`;
+    if (len > 280) {
+      charCountEl.style.color = '#c2410c';
+      charCountEl.style.fontWeight = 'bold';
+    } else {
+      charCountEl.style.color = 'var(--text-muted)';
+      charCountEl.style.fontWeight = 'normal';
+    }
+  });
+}
+
 document.getElementById('guestbook-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const authorInput = document.getElementById('msg-author');
@@ -1459,6 +1493,11 @@ document.getElementById('guestbook-form')?.addEventListener('submit', async (e) 
     if (data.ok) {
       showToast('留墨已刻录，感谢您的思辨');
       contentInput.value = '';
+      if (charCountEl) {
+        charCountEl.textContent = '0 / 300';
+        charCountEl.style.color = 'var(--text-muted)';
+        charCountEl.style.fontWeight = 'normal';
+      }
       fetchMessages();
     }
   } catch (e) {

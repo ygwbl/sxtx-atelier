@@ -27,7 +27,7 @@
   <meta name="twitter:image" content="https://hlat.top/og/default.png">
   <meta name="twitter:title" content="Sxltx · 纸境工坊 · 沉思与造物">
   <meta name="twitter:description" content="Sxltx 的个人工坊与数字漫游手记。纯正一线工程实战复盘、现代原生 Web 架构与深度造物。">
-  <link rel="stylesheet" href="/style.css?v=20261104_v15">
+  <link rel="stylesheet" href="/style.css?v=20261104_v16">
 
   <style id="head-typography-override">
     .featured-summary,
@@ -478,6 +478,10 @@
               </svg>
             </button>
           </div>
+          <div class="guestbook-hint-row">
+            <span class="guestbook-tip">✦ 留下真诚的交流与探讨，工坊即时回笔。</span>
+            <span id="msg-char-count" class="char-count-hint">0 / 300</span>
+          </div>
         </form>
 
         <!-- Message Wall -->
@@ -828,7 +832,7 @@
           <div class="settings-grid">
             <!-- Site Info Form -->
             <form id="form-site-config" class="settings-box">
-              <h4>工坊基本资料</h4>
+              <h4>工坊基本资料与 AI 中枢</h4>
               <div class="field-wrap">
                 <label>站点名称</label>
                 <input type="text" id="cfg-site-title" class="paper-input">
@@ -840,6 +844,13 @@
               <div class="field-wrap">
                 <label>红泥印章字样 (如：纸境\nATELIER)</label>
                 <input type="text" id="cfg-stamp-text" class="paper-input">
+              </div>
+              <div class="field-wrap">
+                <label>智谱 GLM API Key (可选 · 激活 24H 免费大模型 GLM-4-Flash)</label>
+                <input type="password" id="cfg-glm-key" placeholder="粘贴 API Key（未填则使用本地高情商意图引擎）" class="paper-input">
+                <small style="color:var(--text-muted);font-size:0.75rem;margin-top:0.3rem;display:block;">
+                  GLM-4-Flash 是智谱官方 24 小时永久免费开放的模型（0 成本）。在 open.bigmodel.cn 免费获取。
+                </small>
               </div>
               <button type="submit" class="paper-btn btn-secondary">保存工坊资料</button>
             </form>
@@ -911,7 +922,7 @@
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/app.js?v=20261104_v15"></script>
+  <script src="/app.js?v=20261104_v16"></script>
   <!-- Back to top floating button -->
   <button id="btn-back-to-top" class="back-to-top-btn" title="平滑返回顶部" aria-label="返回顶部">
     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
