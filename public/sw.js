@@ -1,4 +1,4 @@
-// Sxtx Atelier Cache Busting & Auto-Purging Worker v5
+// Sxltx Atelier Cache Busting & Auto-Purging Worker v5
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });

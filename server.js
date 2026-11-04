@@ -54,10 +54,10 @@ function getOrInitConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
     const defaultConfig = {
       adminPasswordHash: hashPassword("sxtx2026"),
-      siteTitle: "Sxtx · 纸境工坊",
+      siteTitle: "Sxltx · 纸境工坊",
       siteSubtitle: "在微云之境，构筑自治的工程工作流与思想自留地。",
-      author: "Sxtx",
-      bio: "这里是 Sxtx 的个人工坊。记录关于云原生架构、现代极简交互与自动化系统的深度沉淀；没有浮躁的算法推荐与杂乱信息，仅保留文字、代码与运行中的造物。",
+      author: "Sxltx",
+      bio: "这里是 Sxltx 的个人工坊。记录关于云原生架构、现代极简交互与自动化系统的深度沉淀；没有浮躁的算法推荐与杂乱信息，仅保留文字、代码与运行中的造物。",
       stampText: "纸境\nATELIER"
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2), "utf-8");
@@ -283,9 +283,9 @@ const server = http.createServer(async (req, res) => {
     if (method === "GET") {
       const config = getOrInitConfig();
       const publicConfig = {
-        siteTitle: config.siteTitle || "Sxtx · 纸境工坊",
+        siteTitle: config.siteTitle || "Sxltx · 纸境工坊",
         siteSubtitle: config.siteSubtitle || "",
-        author: config.author || "Sxtx",
+        author: config.author || "Sxltx",
         bio: config.bio || "",
         stampText: config.stampText || "纸境\nATELIER"
       };
@@ -554,5 +554,5 @@ function generateSmartEcho(content, author) {
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  console.log(`Sxtx Atelier Studio Server running on port ${PORT}`);
+  console.log(`Sxltx Atelier Studio Server running on port ${PORT}`);
 });

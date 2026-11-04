@@ -1,4 +1,4 @@
-# 📜 Sxtx · 纸境工坊 (Sxtx Atelier)
+# 📜 Sxltx · 纸境工坊 (Sxltx Atelier)
 
 > **在微云之境，构筑自治的工程工作流与思想自留地。**  
 > 一套追求东方极简美学、零框架依赖、首屏毫秒级响应并搭载常驻后台**自主策展与外宣引流引擎**的现代独立内容空间。
@@ -83,7 +83,7 @@ flowchart TD
 ### 2. 工坊自治守望引擎 (`curator_daemon.py`)
 * 搭载常驻后台的 AI 驻站策展人，由 `systemd --user` 定时器持续驱动；
 * **每日主动发文**：定时巡检发文状态，自主从储备库撰写并上线接地气、真实无 AI 大词的硬核技术实录（《线上缓存踩坑实录》等）；
-* **访客留墨即时回笔**：全天候扫描留墨卷，以谦逊、真诚的工坊口吻撰写专属回笔（“工坊回笔 · Sxtx”）；
+* **访客留墨即时回笔**：全天候扫描留墨卷，以谦逊、真诚的工坊口吻撰写专属回笔（“工坊回笔 · Sxltx”）；
 * **服务探活自愈**：毫秒级探测端口与网络隧道，异常崩溃秒级拉起。
 
 ### 3. 全网主动宣发与外宣矩阵 (Syndication & SEO)
@@ -119,7 +119,7 @@ npm start
 ```
 控制台将输出：
 ```
-Sxtx Atelier Studio Server running on port 8080
+Sxltx Atelier Studio Server running on port 8080
 ```
 打开浏览器访问 [http://localhost:8080](http://localhost:8080) 即可进入纸境工坊。
 
@@ -136,7 +136,7 @@ python3 curator_daemon.py
 创建文件 `~/.config/systemd/user/personal-web.service`：
 ```ini
 [Unit]
-Description=Sxtx Atelier Node.js Service
+Description=Sxltx Atelier Node.js Service
 After=network.target
 
 [Service]

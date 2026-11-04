@@ -62,7 +62,7 @@ try {
 }
 
 /**
- * Sxtx · 纸境工坊 · Studio Core Engine
+ * Sxltx · 纸境工坊 · Studio Core Engine
  * Zero Heavy Bundler · Stale-While-Revalidate · Instant Load
  */
 
@@ -733,7 +733,7 @@ function openReader(article) {
     postludeShareX.onclick = () => {
       const slug = article.slug || article.id;
       const url = `https://hlat.top/article/${slug}`;
-      const text = `【${article.title}】\n${(article.summary || '').trim()}\n\n来自 Sxtx · 纸境工坊：`;
+      const text = `【${article.title}】\n${(article.summary || '').trim()}\n\n来自 Sxltx · 纸境工坊：`;
       const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
       window.open(shareUrl, '_blank', 'noopener,noreferrer');
     };
@@ -927,7 +927,7 @@ document.getElementById('admin-login-form')?.addEventListener('submit', async (e
       }
       pwdInput.value = '';
       updateAdminUI();
-      showToast('已进入 Sxtx 工坊控制台');
+      showToast('已进入 Sxltx 工坊控制台');
     } else {
       errEl.textContent = data.error || '管理密钥错误';
     }
@@ -1687,7 +1687,7 @@ function openQuoteModal(title, text, sourceTitle) {
   currentSelectedQuote = text || title || '';
   quoteTextEl.textContent = currentSelectedQuote;
 
-  const displaySource = sourceTitle || title || (activeQuoteArticle ? activeQuoteArticle.title : 'Sxtx · 纸境工坊');
+  const displaySource = sourceTitle || title || (activeQuoteArticle ? activeQuoteArticle.title : 'Sxltx · 纸境工坊');
   if (quoteSourceEl) {
     quoteSourceEl.textContent = displaySource;
   }
@@ -1747,7 +1747,7 @@ function initQuoteSystem() {
       openQuoteModal(
         activeQuoteArticle ? activeQuoteArticle.title : '沉思墨句',
         currentSelectedQuote,
-        activeQuoteArticle ? activeQuoteArticle.title : 'Sxtx · 纸境工坊'
+        activeQuoteArticle ? activeQuoteArticle.title : 'Sxltx · 纸境工坊'
       );
     });
   }
@@ -1776,8 +1776,8 @@ function initQuoteSystem() {
 
   if (copyBtn) {
     copyBtn.onclick = () => {
-      const sourceName = quoteSourceEl ? quoteSourceEl.textContent : 'Sxtx · 纸境工坊';
-      const formatted = `「${currentSelectedQuote}」\n—— Sxtx《${sourceName}》\n来源：https://hlat.top`;
+      const sourceName = quoteSourceEl ? quoteSourceEl.textContent : 'Sxltx · 纸境工坊';
+      const formatted = `「${currentSelectedQuote}」\n—— Sxltx《${sourceName}》\n来源：https://hlat.top`;
       navigator.clipboard.writeText(formatted).then(() => {
         showToast('已复制墨句文辞到剪贴板 ✦');
         modal.style.display = 'none';
@@ -1847,7 +1847,7 @@ function initQuoteSystem() {
       // 顶部品牌抬头
       ctx.fillStyle = '#71717a';
       ctx.font = '600 24px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText('SXTX · 纸境工坊 · 沉思摘录', 80, 100);
+      ctx.fillText('SXLTX · 纸境工坊 · 沉思摘录', 80, 100);
 
       // 顶部日期
       const now = new Date();
@@ -2009,7 +2009,7 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   navigator.serviceWorker.register('/sw.js').then((reg) => {
-      console.log('Sxtx Atelier PWA Active:', reg.scope);
+      console.log('Sxltx Atelier PWA Active:', reg.scope);
     }).catch(() => {});
   }
 });
