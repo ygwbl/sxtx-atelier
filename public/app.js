@@ -291,6 +291,7 @@ async function initData() {
     if (cachedArts) {
       articles = JSON.parse(cachedArts);
       renderArticles();
+      checkInitialArticleRoute();
     }
 
     const cachedMoms = localStorage.getItem('atelier_moments');
