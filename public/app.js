@@ -1673,7 +1673,33 @@ function cycleTheme() {
 }
 
 // 2. 墨句摘录浮标与高清卡片引擎
+// 2. 墨句摘录浮标与高清卡片引擎
 let activeQuoteArticle = null;
+let currentSelectedQuote = '';
+
+function openQuoteModal(title, text, sourceTitle) {
+  const modal = document.getElementById('quote-modal-overlay');
+  const quoteTextEl = document.getElementById('quote-card-text');
+  const quoteSourceEl = document.getElementById('quote-card-source');
+  const quoteDateEl = document.getElementById('quote-card-date');
+  if (!modal || !quoteTextEl) return;
+
+  currentSelectedQuote = text || title || '';
+  quoteTextEl.textContent = currentSelectedQuote;
+
+  const displaySource = sourceTitle || title || (activeQuoteArticle ? activeQuoteArticle.title : 'Sxtx · 纸境工坊');
+  if (quoteSourceEl) {
+    quoteSourceEl.textContent = displaySource;
+  }
+  if (quoteDateEl) {
+    const now = new Date();
+    quoteDateEl.textContent = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  modal.setAttribute('aria-hidden', 'false');
+  modal.style.display = 'flex';
+}
+window.openQuoteModal = openQuoteModal;
 
 function initQuoteSystem() {
   const pill = document.getElementById('selection-quote-pill');
@@ -1684,8 +1710,6 @@ function initQuoteSystem() {
   const quoteTextEl = document.getElementById('quote-card-text');
   const quoteSourceEl = document.getElementById('quote-card-source');
   const quoteDateEl = document.getElementById('quote-card-date');
-
-  let currentSelectedQuote = '';
 
   const handleSelection = () => {
     const sel = window.getSelection();
@@ -1720,29 +1744,44 @@ function initQuoteSystem() {
       pill.style.display = 'none';
       if (!currentSelectedQuote) return;
 
-      quoteTextEl.textContent = currentSelectedQuote;
-      quoteSourceEl.textContent = activeQuoteArticle ? activeQuoteArticle.title : 'Sxtx · 纸境工坊';
-      const now = new Date();
-      quoteDateEl.textContent = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}`;
-      modal.style.display = 'flex';
+      openQuoteModal(
+        activeQuoteArticle ? activeQuoteArticle.title : '沉思墨句',
+        currentSelectedQuote,
+        activeQuoteArticle ? activeQuoteArticle.title : 'Sxtx · 纸境工坊'
+      );
     });
   }
 
   if (closeBtn) {
-    closeBtn.onclick = () => { modal.style.display = 'none'; };
+    closeBtn.onclick = () => {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+    };
   }
   if (modal) {
     modal.onclick = (e) => {
-      if (e.target === modal) modal.style.display = 'none';
+      if (e.target === modal) {
+        modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
+      }
     };
   }
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal && modal.style.display === 'flex') {
+      modal.style.display = 'none';
+      modal.setAttribute('aria-hidden', 'true');
+    }
+  });
+
   if (copyBtn) {
     copyBtn.onclick = () => {
-      const formatted = `「${currentSelectedQuote}」\n—— Sxtx《${quoteSourceEl.textContent}》\n来源：https://blog.hlat.xyz`;
+      const sourceName = quoteSourceEl ? quoteSourceEl.textContent : 'Sxtx · 纸境工坊';
+      const formatted = `「${currentSelectedQuote}」\n—— Sxtx《${sourceName}》\n来源：https://hlat.top`;
       navigator.clipboard.writeText(formatted).then(() => {
         showToast('已复制墨句文辞到剪贴板 ✦');
         modal.style.display = 'none';
+        modal.setAttribute('aria-hidden', 'true');
       });
     };
   }
@@ -1752,31 +1791,72 @@ function initQuoteSystem() {
       const canvas = document.getElementById('quote-canvas');
       if (!canvas) return;
       const ctx = canvas.getContext('2d');
-      const w = 1200, h = 800;
+      const w = 1200;
+
+      // 预先分行测算排版高度
+      const maxTextWidth = w - 180;
+      const textToWrap = `“${currentSelectedQuote}”`;
+
+      // 动态根据字数选择合适字号与行距
+      let fontSize = 34;
+      let lineHeight = 54;
+      if (textToWrap.length > 180) {
+        fontSize = 28;
+        lineHeight = 46;
+      } else if (textToWrap.length > 300) {
+        fontSize = 24;
+        lineHeight = 40;
+      }
+
+      ctx.font = `italic ${fontSize}px "Lora", "Noto Serif SC", "Songti SC", serif`;
+      const lines = [];
+      let currentLine = '';
+      for (let n = 0; n < textToWrap.length; n++) {
+        const testLine = currentLine + textToWrap[n];
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > maxTextWidth && n > 0) {
+          lines.push(currentLine);
+          currentLine = textToWrap[n];
+        } else {
+          currentLine = testLine;
+        }
+      }
+      if (currentLine) lines.push(currentLine);
+
+      // 计算自适应高度
+      const topPadding = 200;
+      const bottomPadding = 220;
+      const textBlockHeight = lines.length * lineHeight;
+      const h = Math.max(760, topPadding + textBlockHeight + bottomPadding);
       canvas.width = w;
       canvas.height = h;
 
+      // 宣纸竹韵背景
       ctx.fillStyle = '#fcfbf9';
       ctx.fillRect(0, 0, w, h);
 
+      // 宣纸双重边框
       ctx.strokeStyle = '#e1ddd4';
       ctx.lineWidth = 2;
       ctx.strokeRect(40, 40, w - 80, h - 80);
 
-      ctx.strokeStyle = '#ebe8e2';
+      ctx.strokeStyle = '#eae6df';
       ctx.lineWidth = 1;
       ctx.strokeRect(48, 48, w - 96, h - 96);
 
+      // 顶部品牌抬头
       ctx.fillStyle = '#71717a';
       ctx.font = '600 24px "Plus Jakarta Sans", sans-serif';
       ctx.fillText('SXTX · 纸境工坊 · 沉思摘录', 80, 100);
 
+      // 顶部日期
       const now = new Date();
       const dateStr = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`;
       ctx.textAlign = 'right';
       ctx.font = '500 22px "JetBrains Mono", monospace';
       ctx.fillText(dateStr, w - 80, 100);
 
+      // 顶部虚线
       ctx.beginPath();
       ctx.setLineDash([8, 6]);
       ctx.moveTo(80, 125);
@@ -1785,27 +1865,17 @@ function initQuoteSystem() {
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // 正文内容
       ctx.textAlign = 'left';
       ctx.fillStyle = '#18181b';
-      ctx.font = 'italic 34px "Lora", "Noto Serif SC", serif';
-      
-      const maxTextWidth = w - 160;
-      const textToWrap = `“${currentSelectedQuote}”`;
-      let line = '';
-      let y = 240;
-      for (let n = 0; n < textToWrap.length; n++) {
-        const testLine = line + textToWrap[n];
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > maxTextWidth && n > 0) {
-          ctx.fillText(line, 80, y);
-          line = textToWrap[n];
-          y += 52;
-        } else {
-          line = testLine;
-        }
+      ctx.font = `italic ${fontSize}px "Lora", "Noto Serif SC", "Songti SC", serif`;
+      let y = topPadding;
+      for (let i = 0; i < lines.length; i++) {
+        ctx.fillText(lines[i], 80, y);
+        y += lineHeight;
       }
-      ctx.fillText(line, 80, y);
 
+      // 底部虚线
       ctx.beginPath();
       ctx.setLineDash([8, 6]);
       ctx.moveTo(80, h - 160);
@@ -1814,14 +1884,17 @@ function initQuoteSystem() {
       ctx.stroke();
       ctx.setLineDash([]);
 
+      // 底部出处与元数据
+      const sourceTitle = (quoteSourceEl ? quoteSourceEl.textContent : '') || (activeQuoteArticle ? activeQuoteArticle.title : '随笔沉思');
       ctx.fillStyle = '#18181b';
-      ctx.font = '600 24px "Plus Jakarta Sans", sans-serif';
-      ctx.fillText(`出处：《${quoteSourceEl.textContent}》`, 80, h - 110);
-      
+      ctx.font = '600 24px "Plus Jakarta Sans", "Noto Serif SC", sans-serif';
+      ctx.fillText(`出处：《${sourceTitle}》`, 80, h - 110);
+
       ctx.fillStyle = '#71717a';
       ctx.font = '500 20px "JetBrains Mono", monospace';
-      ctx.fillText('blog.hlat.xyz · 人机共生思想自留地', 80, h - 80);
+      ctx.fillText('hlat.top · 人机共生思想自留地', 80, h - 80);
 
+      // 朱砂印章（纸境工坊）
       const sealX = w - 170, sealY = h - 145, sealW = 90, sealH = 90;
       ctx.save();
       ctx.translate(sealX + sealW / 2, sealY + sealH / 2);
