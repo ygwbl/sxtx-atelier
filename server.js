@@ -207,9 +207,9 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
   } else if (isCacheable) {
     const hasVersion = req.url && (req.url.includes("?v=") || req.url.includes("&v="));
     if (hasVersion) {
-      headers["Cache-Control"] = "public, max-age=31536000, immutable";
-      headers["CDN-Cache-Control"] = "max-age=31536000";
-      headers["Cloudflare-CDN-Cache-Control"] = "max-age=31536000";
+      headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=86400";
+      headers["CDN-Cache-Control"] = "max-age=86400";
+      headers["Cloudflare-CDN-Cache-Control"] = "max-age=86400";
     } else {
       headers["Cache-Control"] = "public, max-age=60, must-revalidate";
       headers["CDN-Cache-Control"] = "max-age=120";
