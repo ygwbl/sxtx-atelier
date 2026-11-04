@@ -334,6 +334,10 @@ function applyConfig(cfg) {
     if (titleEl) titleEl.textContent = cfg.siteTitle;
     document.title = `${cfg.siteTitle} · 沉思与造物`;
   }
+  if (cfg.siteSubtitle) {
+    const subEl = document.getElementById('site-subtitle-display');
+    if (subEl) subEl.textContent = cfg.siteSubtitle;
+  }
   if (cfg.bio) {
     const bioEl = document.getElementById('site-bio-display');
     if (bioEl) bioEl.innerHTML = cfg.bio;
@@ -2062,6 +2066,21 @@ function initGuestbookEnhancements() {
     });
   }
 
+  // Topic Chips integration
+  const chips = document.querySelectorAll('.topic-chip');
+  if (contentInput && chips.length) {
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        const prefix = chip.getAttribute('data-prefix') || '';
+        let current = contentInput.value.trim();
+        current = current.replace(/^【[^】]+】\s*/, '');
+        contentInput.value = `${prefix} ${current}`.trim() + ' ';
+        contentInput.focus();
+        contentInput.dispatchEvent(new Event('input'));
+      });
+    });
+  }
+
   const form = document.getElementById('guestbook-form');
   if (form && hpInput) {
     form.addEventListener('submit', (e) => {
@@ -2091,11 +2110,37 @@ function attachCompositionGuard(inputEl, onEnterCallback) {
   });
 }
 
+function initScrollSpy() {
+  const sections = document.querySelectorAll('section.content-section, section.hero-section');
+  const navLinks = document.querySelectorAll('.nav-dock .nav-item');
+  if (!navLinks.length || !sections.length) return;
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const id = entry.target.getAttribute('id');
+        if (!id) return;
+        navLinks.forEach(link => {
+          const href = link.getAttribute('href');
+          if (href === `#${id}`) {
+            link.classList.add('active');
+          } else {
+            link.classList.remove('active');
+          }
+        });
+      }
+    });
+  }, { rootMargin: '-20% 0px -60% 0px' });
+
+  sections.forEach(sec => observer.observe(sec));
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   initSegmentedControl();
   initTheme();
   initQuoteSystem();
   initGuestbookEnhancements();
+  initScrollSpy();
 
   window.addEventListener('keydown', (e) => {
     const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';

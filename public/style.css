@@ -3819,8 +3819,7 @@ html, body {
 /* ==========================================================================
    中文正统排版：段间距、精细缩进与大厂级悬挂列表 (Typography & Hanging Lists)
    ========================================================================== */
-.featured-summary,
-.art-desc {
+.featured-summary {
   text-indent: 2em;
   text-align: justify;
 }
@@ -5354,4 +5353,180 @@ body.theme-dark .webring-pill:hover {
 [data-theme="dark"] .essay-row-item:hover .essay-title-col,
 body.theme-dark .essay-row-item:hover .essay-title-col {
   color: #fca5a5 !important;
+}
+
+/* ==========================================================================
+   Sxltx Atelier 2.2 UI Polish: Hero Masthead, HA Badges, Chips & ScrollSpy
+   ========================================================================== */
+
+/* 1. Hero Masthead & Typography */
+.hero-masthead {
+  margin: 1.25rem 0 0.85rem;
+}
+
+.hero-title {
+  font-family: var(--font-serif);
+  font-size: 2.75rem !important;
+  font-weight: 700 !important;
+  line-height: 1.18 !important;
+  color: var(--text-title);
+  letter-spacing: -0.025em;
+  margin-bottom: 0.4rem;
+}
+
+.hero-subtitle {
+  font-family: var(--font-serif);
+  font-size: 1.18rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.hero-bio {
+  font-size: 0.96rem;
+  line-height: 1.75;
+  color: var(--text-body);
+  max-width: 46rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero-badges-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.hero-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.8rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all var(--transition-fast);
+}
+
+.hero-meta-badge:hover {
+  border-color: var(--border-focus);
+  color: var(--text-title);
+  transform: translateY(-1px);
+}
+
+.hero-meta-badge.live-ha {
+  background: rgba(5, 150, 105, 0.04);
+  border-color: rgba(5, 150, 105, 0.28);
+  color: #065f46;
+}
+
+[data-theme="dark"] .hero-meta-badge.live-ha,
+body.theme-dark .hero-meta-badge.live-ha {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.badge-dot-emerald {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+  flex-shrink: 0;
+}
+
+.badge-dot-vermilion {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: var(--brand-seal, #b91c1c);
+  box-shadow: 0 0 6px rgba(185, 28, 28, 0.4);
+  flex-shrink: 0;
+}
+
+/* 2. Navigation ScrollSpy Active State */
+.nav-item.active {
+  color: var(--text-title) !important;
+  background: var(--bg-hover) !important;
+  font-weight: 600 !important;
+}
+
+.nav-item.active .nav-num {
+  color: var(--brand-seal, #b91c1c) !important;
+  font-weight: 700 !important;
+}
+
+/* 3. Artifacts Cards Visual Polish (Anti-Justify & Crisp Spacing) */
+.art-desc {
+  text-indent: 0 !important;
+  text-align: left !important;
+  font-size: 0.88rem !important;
+  line-height: 1.62 !important;
+  color: var(--text-muted) !important;
+  word-break: break-word !important;
+}
+
+.artifact-card {
+  transition: transform var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal) !important;
+}
+
+.artifact-card:hover {
+  transform: translateY(-2px) !important;
+  border-color: var(--border-focus) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+/* 4. Guestbook Quick Topic Chips */
+.guestbook-topic-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.topic-chip-label {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  font-family: var(--font-serif);
+}
+
+.topic-chip {
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  padding: 0.22rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.topic-chip:hover {
+  border-color: var(--brand-seal, #b91c1c);
+  color: var(--brand-seal, #b91c1c);
+  background: var(--brand-seal-bg, rgba(185, 28, 28, 0.04));
+  transform: translateY(-1px);
+}
+
+/* 5. Mobile Adjustments */
+@media (max-width: 768px) {
+  .hero-title {
+    font-size: 1.85rem !important;
+  }
+  .hero-subtitle {
+    font-size: 0.98rem !important;
+  }
+  .hero-badges-cluster {
+    gap: 0.4rem;
+  }
+  .hero-meta-badge {
+    font-size: 0.74rem;
+    padding: 0.28rem 0.6rem;
+  }
 }
