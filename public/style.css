@@ -2994,43 +2994,87 @@ html, body {
   backdrop-filter: blur(12px);
 }
 
-/* 2. 智能代码块系统 (Smart Code Blocks) */
+/* 2. 智能代码块系统 (Smart Code Blocks with macOS Dots & 48px Touch) */
 .code-block-wrapper {
-  margin: 1.35rem 0;
+  margin: 1.5rem 0;
   border: 1px solid var(--border-line);
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
   background: var(--bg-card);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  text-indent: 0 !important;
 }
 
 .code-block-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.4rem 0.85rem;
+  padding: 0.55rem 0.95rem;
   background: var(--bg-subtle);
   border-bottom: 1px solid var(--border-subtle);
-  font-family: var(--font-mono);
-  font-size: 0.74rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.76rem;
+  user-select: none;
+  gap: 0.75rem;
+}
+
+/* macOS 三色小圆点 */
+.code-mac-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mac-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  opacity: 0.85;
+  transition: opacity var(--transition-fast);
+}
+
+.mac-dot:hover {
+  opacity: 1;
+}
+
+.mac-dot-close {
+  background: #ff5f56;
+  box-shadow: 0 0 2px rgba(255, 95, 86, 0.4);
+}
+
+.mac-dot-min {
+  background: #ffbd2e;
+  box-shadow: 0 0 2px rgba(255, 189, 46, 0.4);
+}
+
+.mac-dot-max {
+  background: #27c93f;
+  box-shadow: 0 0 2px rgba(39, 201, 63, 0.4);
 }
 
 .code-lang-tag {
   color: var(--text-muted);
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  background: rgba(128, 128, 128, 0.08);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
 }
 
+/* 复制代码按钮 - 充足触控区域与平滑微动效 */
 .code-copy-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  background: transparent;
+  gap: 0.4rem;
+  background: var(--bg-card);
   border: 1px solid var(--border-line);
-  border-radius: 4px;
-  padding: 0.2rem 0.55rem;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
+  border-radius: 5px;
+  padding: 0.28rem 0.65rem;
+  min-height: 32px;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.74rem;
   color: var(--text-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -3040,26 +3084,57 @@ html, body {
   background: var(--bg-hover);
   color: var(--text-title);
   border-color: var(--border-focus);
+  transform: translateY(-1px);
 }
 
 .code-copy-btn.copied {
-  color: var(--brand-emerald);
-  border-color: var(--brand-emerald);
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+  background: rgba(16, 185, 129, 0.08) !important;
 }
 
-.code-block-wrapper pre {
+.code-block-wrapper pre,
+.code-block-wrapper pre.code-content {
   margin: 0 !important;
-  padding: 1.15rem !important;
-  overflow-x: auto;
+  padding: 1.15rem 1.25rem !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  word-break: normal !important;
+  text-indent: 0 !important;
   border: none !important;
   border-radius: 0 !important;
   background: transparent !important;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', Menlo, Consolas, monospace !important;
+  font-size: 0.85rem !important;
+  line-height: 1.68 !important;
+  tab-size: 2;
 }
 
 .code-block-wrapper code {
-  font-family: var(--font-mono) !important;
-  font-size: 0.86rem !important;
-  line-height: 1.65 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+  text-indent: 0 !important;
+  white-space: pre !important;
+  color: var(--text-title) !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+}
+
+/* 行内代码标签 */
+.reader-inline-code,
+#reader-content :not(pre) > code {
+  font-family: var(--font-mono, monospace) !important;
+  font-size: 0.85em !important;
+  padding: 0.15rem 0.4rem !important;
+  background: rgba(128, 128, 128, 0.12) !important;
+  color: var(--brand-seal, #b83b3b) !important;
+  border-radius: 4px !important;
+  text-indent: 0 !important;
+  display: inline !important;
 }
 
 /* 3. 长文导读目录 (Table of Contents in Reader) */
@@ -3705,18 +3780,24 @@ html, body {
 }
 
 /* ==========================================================================
-   中文正统排版：段落首行缩进两字符与自然两端对齐 (Chinese Typography Indent)
+   中文正统排版：段间距、精细缩进与大厂级悬挂列表 (Typography & Hanging Lists)
    ========================================================================== */
 .featured-summary,
-.art-desc,
-#reader-content p,
-.article-content p,
-.reader-body p {
+.art-desc {
   text-indent: 2em;
   text-align: justify;
 }
 
-/* 严格排除不需要缩进的元素、代码、列表、引用及摘要卡片 */
+/* 正文段落：优雅段间距与两端对齐 */
+#reader-content p.reader-para,
+#reader-content p {
+  text-indent: 2em;
+  text-align: justify;
+  margin-bottom: 1.35rem;
+  line-height: 1.88;
+}
+
+/* 严格排除一切不需要段首缩进的元素 */
 #reader-content pre,
 #reader-content code,
 #reader-content ul,
@@ -3727,13 +3808,90 @@ html, body {
 #reader-content h2,
 #reader-content h3,
 #reader-content h4,
+#reader-content hr,
 .ai-insight-card,
 .ai-insight-card p,
 .ai-insight-card li,
 .ai-insight-card ul,
 .code-block-wrapper,
-.code-block-wrapper p {
+.code-block-wrapper * {
   text-indent: 0 !important;
+}
+
+/* 有序列表：经典悬挂对齐（Hanging Indent），彻底消灭数字被推跑、第二行折回顶格的车祸 */
+#reader-content ol,
+.reader-ordered-list {
+  list-style: none !important;
+  counter-reset: reader-ol-counter;
+  padding-left: 0 !important;
+  margin: 1.25rem 0 1.5rem !important;
+  text-indent: 0 !important;
+}
+
+#reader-content ol > li,
+.reader-ol-item {
+  counter-increment: reader-ol-counter;
+  position: relative !important;
+  padding-left: 2.2rem !important;
+  margin-bottom: 0.85rem !important;
+  line-height: 1.85 !important;
+  color: var(--text-body);
+  text-align: justify;
+  text-indent: 0 !important;
+}
+
+#reader-content ol > li::before,
+.reader-ol-item::before {
+  content: counter(reader-ol-counter) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 700;
+  color: var(--brand-seal, #b83b3b);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95rem;
+  width: 1.8rem;
+  text-align: right;
+  line-height: 1.85;
+}
+
+/* 无序列表：精致朱砂印符号 */
+#reader-content ul,
+.reader-unordered-list {
+  list-style: none !important;
+  padding-left: 0 !important;
+  margin: 1.2rem 0 1.5rem !important;
+  text-indent: 0 !important;
+}
+
+#reader-content ul > li,
+.reader-ul-item {
+  position: relative !important;
+  padding-left: 1.6rem !important;
+  margin-bottom: 0.75rem !important;
+  line-height: 1.85 !important;
+  color: var(--text-body);
+  text-align: justify;
+  text-indent: 0 !important;
+}
+
+#reader-content ul > li::before,
+.reader-ul-item::before {
+  content: "✦";
+  position: absolute;
+  left: 0.25rem;
+  top: 0;
+  font-size: 0.72rem;
+  color: var(--brand-seal, #b83b3b);
+  line-height: 1.85;
+}
+
+/* 分割线 */
+.reader-hr {
+  border: none;
+  border-top: 1px dashed var(--border-line);
+  margin: 2rem 0;
+  opacity: 0.6;
 }
 
 

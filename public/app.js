@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v6';
+const CURRENT_RELEASE_VER = '20261104_v12';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -118,18 +118,27 @@ function parseMarkdown(md) {
   if (!md) return '';
   let html = md.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
 
-  // Pre-process code blocks with language header and copy button
+  // 1. Normalize legacy or embedded HTML code blocks into markdown fences
+  html = html.replace(/<p[^>]*>\s*<code\s+class="lang-([^"]+)">([\s\S]*?)<\/code>\s*<\/pre>/gi, (m, lang, code) => `\n\n\`\`\`${lang}\n${code.trim()}\n\`\`\`\n\n`);
+  html = html.replace(/<pre>\s*<code\s+class="lang-([^"]+)">([\s\S]*?)<\/code>\s*<\/pre>/gi, (m, lang, code) => `\n\n\`\`\`${lang}\n${code.trim()}\n\`\`\`\n\n`);
+
+  // 2. Pre-process code blocks with macOS dots, language tag and copy button
   const codeBlocks = [];
-  html = html.replace(/```([a-zA-Z0-9_]*)\n([\s\S]*?)```/g, (match, lang, code) => {
+  html = html.replace(/```([a-zA-Z0-9_\-\+]*)\n([\s\S]*?)```/g, (match, lang, code) => {
     const placeholder = `__CODE_BLOCK_${codeBlocks.length}__`;
-    const cleanLang = (lang || 'code').toUpperCase();
+    const cleanLang = (lang || 'CODE').toUpperCase();
     const cleanCode = escapeHtml(code.trim());
     const rawAttr = encodeURIComponent(code.trim());
     codeBlocks.push(`
       <div class="code-block-wrapper">
         <div class="code-block-header">
+          <div class="code-mac-dots" aria-hidden="true">
+            <span class="mac-dot mac-dot-close"></span>
+            <span class="mac-dot mac-dot-min"></span>
+            <span class="mac-dot mac-dot-max"></span>
+          </div>
           <span class="code-lang-tag">${cleanLang}</span>
-          <button class="code-copy-btn" data-code="${rawAttr}" title="复制代码">
+          <button class="code-copy-btn" data-code="${rawAttr}" title="复制代码" aria-label="复制代码">
             <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -137,57 +146,88 @@ function parseMarkdown(md) {
             <span>复制</span>
           </button>
         </div>
-        <pre><code class="lang-${lang}">${cleanCode}</code></pre>
+        <pre class="code-content"><code class="lang-${lang}">${cleanCode}</code></pre>
       </div>
     `);
-    return placeholder;
+    return `\n\n${placeholder}\n\n`;
   });
 
-  // Headers with IDs for Table of Contents
+  // 3. Ensure blank line before ordered/unordered lists
+  html = html.replace(/([^\n])\n(\s*(?:\d+\.|\-|\*)\s+)/g, '$1\n\n$2');
+
+  // 4. Headers with IDs for Table of Contents
   let headingCount = 0;
   html = html.replace(/^### (.*$)/gim, (m, title) => {
     headingCount++;
-    return `<h3 id="sec-h3-${headingCount}">${title}</h3>`;
+    return `\n\n<h3 id="sec-h3-${headingCount}">${title}</h3>\n\n`;
   });
   html = html.replace(/^## (.*$)/gim, (m, title) => {
     headingCount++;
-    return `<h2 id="sec-h2-${headingCount}">${title}</h2>`;
+    return `\n\n<h2 id="sec-h2-${headingCount}">${title}</h2>\n\n`;
   });
   html = html.replace(/^# (.*$)/gim, (m, title) => {
     headingCount++;
-    return `<h2 id="sec-h2-${headingCount}">${title}</h2>`;
+    return `\n\n<h2 id="sec-h2-${headingCount}">${title}</h2>\n\n`;
   });
 
-  // Blockquotes
+  // 5. Blockquotes
   html = html.replace(/^\> (.*$)/gim, '<blockquote><p>$1</p></blockquote>');
 
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // 6. Inline code
+  html = html.replace(/`([^`]+)`/g, '<code class="reader-inline-code">$1</code>');
 
-  // Bold & Italic
+  // 7. Bold & Italic
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
 
-  // Unordered list items
-  html = html.replace(/^\s*[\-\*] (.*$)/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>');
-  // Fix nested ul duplicates
-  html = html.replace(/<\/ul>\s*<ul>/g, '');
+  // 8. Horizontal rules
+  html = html.replace(/^---$/gim, '\n\n<hr class="reader-hr">\n\n');
 
-  // Links
+  // 9. Process Lists via Placeholder Isolation (Prevents accidental <p> wrapping)
+  const listBlocks = [];
+  // Ordered lists
+  html = html.replace(/^\s*(\d+)\.\s+(.*$)/gim, '<li class="reader-ol-item" data-num="$1">$2</li>');
+  html = html.replace(/((?:<li class="reader-ol-item"[^>]*>.*?<\/li>\s*)+)/gis, (m, content) => {
+    const ph = `__LIST_BLOCK_${listBlocks.length}__`;
+    listBlocks.push(`<ol class="reader-ordered-list">\n${content.trim()}\n</ol>`);
+    return `\n\n${ph}\n\n`;
+  });
+
+  // Unordered lists
+  html = html.replace(/^\s*[\-\*]\s+(.*$)/gim, '<li class="reader-ul-item">$1</li>');
+  html = html.replace(/((?:<li class="reader-ul-item"[^>]*>.*?<\/li>\s*)+)/gis, (m, content) => {
+    const ph = `__LIST_BLOCK_${listBlocks.length}__`;
+    listBlocks.push(`<ul class="reader-unordered-list">\n${content.trim()}\n</ul>`);
+    return `\n\n${ph}\n\n`;
+  });
+
+  // 10. Links
   html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-  // Paragraphs
+  // 11. Paragraphs with strict exclusions
   html = html.split(/\n{2,}/).map(para => {
     para = para.trim();
     if (!para) return '';
-    if (para.startsWith('<h') || para.startsWith('<ul') || para.startsWith('<pre') || para.startsWith('<blockquote') || para.startsWith('__CODE_BLOCK_')) {
+    if (para.startsWith('<h') || 
+        para.startsWith('<ul') || 
+        para.startsWith('<ol') || 
+        para.startsWith('<pre') || 
+        para.startsWith('<blockquote') || 
+        para.startsWith('<hr') || 
+        para.startsWith('<div') || 
+        para.includes('__CODE_BLOCK_') ||
+        para.includes('__LIST_BLOCK_')) {
       return para;
     }
-    return `<p>${para.replace(/\n/g, '<br>')}</p>`;
-  }).join('\n');
+    return `<p class="reader-para">${para.replace(/\n/g, '<br>')}</p>`;
+  }).join('\n\n');
 
-  // Restore code blocks
+  // 12. Restore list blocks
+  listBlocks.forEach((block, idx) => {
+    html = html.replace(`__LIST_BLOCK_${idx}__`, block);
+  });
+
+  // 13. Restore code blocks
   codeBlocks.forEach((block, idx) => {
     html = html.replace(`__CODE_BLOCK_${idx}__`, block);
   });
