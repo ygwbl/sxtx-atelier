@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v14';
+const CURRENT_RELEASE_VER = '20261104_v15';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -644,7 +644,7 @@ function openReader(article) {
       h.id = anchorId;
       tocListHtml += `
         <li class="reader-toc-item ${isSub ? 'level-sub' : 'level-top'}" data-target="${anchorId}">
-          <span class="toc-bullet">${isSub ? '·' : '§'}</span>
+          <span class="toc-bullet">${isSub ? '·' : '•'}</span>
           <span class="toc-text">${escapeHtml(h.textContent)}</span>
         </li>
       `;
