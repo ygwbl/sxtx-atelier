@@ -1,0 +1,12 @@
+[Unit]
+Description=Sxtx Atelier Autonomous Periodic Curator Timer
+
+[Timer]
+OnStartupSec=1min
+OnUnitActiveSec=30min
+Persistent=true
+AccuracySec=10s
+Unit=atelier-curator.service
+
+[Install]
+WantedBy=timers.target

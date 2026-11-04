@@ -1,0 +1,25 @@
+{
+  "name": "sxtx-atelier",
+  "version": "2.0.0",
+  "description": "Sxtx · 纸境工坊 · 东方极简美学个人数字自留地与自动化自治策展系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "curator": "python3 curator_daemon.py"
+  },
+  "keywords": [
+    "blog",
+    "minimalism",
+    "vanilla-js",
+    "takeo-paper",
+    "autonomous-curator",
+    "indieweb",
+    "indexnow",
+    "rss"
+  ],
+  "author": "Sxtx (ygwbl)",
+  "license": "CC-BY-NC-SA-4.0",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

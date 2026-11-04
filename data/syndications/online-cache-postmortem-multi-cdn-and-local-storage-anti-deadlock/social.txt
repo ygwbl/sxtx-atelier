@@ -1,0 +1,6 @@
+【线上缓存踩坑实录：多层 CDN 与前端本地存储的防死锁方案】
+
+前两天工坊遭遇了非常典型且棘手的缓存死锁问题：源站代码与文章早已更新，接口也是通的，但国内外的边缘节点与客户端却持续返回昨天的旧页面。本文将这次排查中遇到的 CDN 静态哈希碰撞、stale-if-error 容灾反向锁...
+
+工坊手记直达：https://hlat.top/article/online-cache-postmortem-multi-cdn-and-local-storage-anti-deadlock
+#Web开发 #架构设计 #独立博客

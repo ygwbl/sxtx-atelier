@@ -1,0 +1,11 @@
+[Unit]
+Description=Sxtx Atelier Autonomous Curator & Guardian Service
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/data/home/personal-site
+ExecStart=/usr/bin/python3 /data/home/personal-site/curator_daemon.py
+TimeoutStartSec=180
+StandardOutput=append:/data/home/personal-site/curator.log
+StandardError=append:/data/home/personal-site/curator.log
