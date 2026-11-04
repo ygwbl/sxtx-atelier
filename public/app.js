@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v20';
+const CURRENT_RELEASE_VER = '20261104_v21';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -540,7 +540,7 @@ function renderMessages() {
           <div class="msg-echo-box">
             <div class="echo-header">
               <div class="echo-sender">
-                <img src="/logo.png?v=20261104_v20" alt="工坊主理人" class="echo-avatar" loading="lazy">
+                <img src="/logo.png?v=20261104_v21" alt="工坊主理人" class="echo-avatar">
                 <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
                 <span class="echo-badge-seal">主理人</span>
               </div>

@@ -325,11 +325,11 @@ body {
 
 .hero-meta-row {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin-top: 1.5rem;
+  margin-top: 2rem;
 }
 
 /* Red Seal Stamp (Carved Chop Stamp) */
@@ -610,7 +610,7 @@ body {
 }
 
 .essay-row-item:hover .essay-title-col {
-  color: #000;
+  color: var(--brand-seal, #b83b3b);
   text-decoration: underline;
   text-underline-offset: 4px;
 }
@@ -654,16 +654,16 @@ body {
   padding-left: 2rem;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: 1.5rem;
 }
 
 .moments-timeline::before {
   content: '';
   position: absolute;
-  top: 0.5rem;
-  bottom: 0.5rem;
-  left: 7px;
-  width: 1px;
+  top: 1rem;
+  bottom: 1rem;
+  left: 15px;
+  width: 2px;
   background: var(--border-line);
 }
 
@@ -671,27 +671,28 @@ body {
   position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border-line);
-  border-radius: 8px;
-  padding: 1.25rem 1.5rem;
+  border-radius: 10px;
+  padding: 1.15rem 1.4rem;
   box-shadow: var(--shadow-sm);
-  transition: border-color var(--transition-fast), transform var(--transition-fast);
+  transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 .moment-entry:hover {
-  border-color: rgba(0, 0, 0, 0.25);
-  transform: translateX(2px);
+  border-color: rgba(184, 59, 59, 0.3);
+  transform: translateX(3px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
 }
 
 .moment-dot {
   position: absolute;
-  top: 1.5rem;
-  left: -2rem;
-  width: 15px;
-  height: 15px;
+  top: 1.4rem;
+  left: calc(-2rem + 9px);
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   background: var(--bg-paper);
-  border: 2px solid var(--text-muted);
-  transform: translateX(-50%);
+  border: 2.5px solid var(--brand-seal, #b83b3b);
+  box-shadow: 0 0 0 3px var(--bg-paper);
 }
 
 .moment-header {
@@ -5279,4 +5280,78 @@ body.theme-dark .echo-badge-seal {
   border-radius: 50% !important;
   object-fit: cover !important;
   display: block !important;
+}
+
+/* ==========================================================================
+   2026.11.04 NEW: STUDIO GRADE UI POLISH & FEDERATION PILLS
+   ========================================================================== */
+
+/* 1. Webring Federation Pills */
+.webring-links {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  flex-wrap: wrap !important;
+}
+
+.webring-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  padding: 0.35rem 0.75rem !important;
+  border-radius: 9999px !important;
+  border: 1px solid var(--border-line) !important;
+  background: var(--bg-card) !important;
+  font-size: 0.78rem !important;
+  color: var(--text-muted) !important;
+  text-decoration: none !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  white-space: nowrap !important;
+}
+
+.webring-pill:hover {
+  border-color: var(--brand-seal, #b83b3b) !important;
+  color: var(--text-title) !important;
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06) !important;
+}
+
+[data-theme="dark"] .webring-pill,
+body.theme-dark .webring-pill {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .webring-pill:hover,
+body.theme-dark .webring-pill:hover {
+  border-color: #f87171 !important;
+  color: var(--text-title) !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* 2. Form Ergonomic Focus Rings */
+.paper-input:focus,
+.paper-textarea:focus {
+  outline: none !important;
+  border-color: var(--brand-seal, #b83b3b) !important;
+  box-shadow: 0 0 0 3px rgba(184, 59, 59, 0.1) !important;
+}
+
+/* 3. Category Filter Tabs Polish */
+.cat-tab {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.cat-tab.active {
+  background: var(--text-title) !important;
+  color: var(--bg-paper) !important;
+  border-color: var(--text-title) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* 4. Dark Mode Article Title Hover Protection */
+[data-theme="dark"] .essay-row-item:hover .essay-title-col,
+body.theme-dark .essay-row-item:hover .essay-title-col {
+  color: #fca5a5 !important;
 }
