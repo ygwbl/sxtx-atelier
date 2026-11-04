@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261104_v17';
+const CURRENT_RELEASE_VER = '20261104_v18';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -1089,7 +1089,7 @@ function updateStudioArticlesList() {
   list.innerHTML = articles.map(art => {
     const catCls = getCatClass(art.category);
     return `
-      <div class="studio-item-row">
+      <div class="studio-article-row">
         <span class="cat-badge ${catCls}">${escapeHtml(art.category || '随笔')}</span>
         <span class="sir-title-stream" title="${escapeHtml(art.title)}">${escapeHtml(art.title)}</span>
         <div class="sir-time-group">

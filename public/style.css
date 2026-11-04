@@ -4713,12 +4713,29 @@ html {
   width: 100%;
 }
 
-.studio-item-row {
+.studio-article-row {
   display: grid;
   grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 0.85rem;
   padding: 0.75rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-line);
+  border-radius: 6px;
+  transition: all var(--transition-fast);
+}
+
+.studio-article-row:hover {
+  background: var(--bg-hover);
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+.studio-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
   background: var(--bg-card);
   border: 1px solid var(--border-line);
   border-radius: 6px;

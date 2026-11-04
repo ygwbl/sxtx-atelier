@@ -669,7 +669,7 @@ const server = http.createServer(async (req, res) => {
             temperature: 0.7,
             max_tokens: 250
           }),
-          signal: AbortSignal.timeout(5000)
+          signal: AbortSignal.timeout(9000)
         });
 
         if (resp.ok) {
