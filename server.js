@@ -16,6 +16,7 @@ const MOMENTS_FILE = path.join(DATA_DIR, "moments.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
 const RESONANCES_FILE = path.join(DATA_DIR, "resonances.json");
 const VISITS_FILE = path.join(DATA_DIR, "visits.json"); // v29 · 来客图：仅城市级聚合，不存 IP
+const TOMBSTONES_FILE = path.join(DATA_DIR, "tombstones.json"); // v38 · 分布式墓碑：防止双活多节点同步时被删数据僵尸复活
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -145,6 +146,28 @@ function readJSON(file, fallback = []) {
 
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+}
+
+/* ==========================================================================
+   v38 · 分布式墓碑机制 (Tombstones)
+   记录被删除实体的 ID，防止双活节点（VPS + InstaBox）双向同步时被删数据复活。
+   ========================================================================== */
+function readTombstones() {
+  const d = readJSON(TOMBSTONES_FILE, {});
+  return {
+    messages: Array.isArray(d.messages) ? d.messages : [],
+    moments: Array.isArray(d.moments) ? d.moments : [],
+    articles: Array.isArray(d.articles) ? d.articles : []
+  };
+}
+function addTombstone(category, id) {
+  if (!id) return;
+  const t = readTombstones();
+  if (!t[category].includes(id)) {
+    t[category].push(id);
+    if (t[category].length > 500) t[category] = t[category].slice(-500);
+    writeJSON(TOMBSTONES_FILE, t);
+  }
 }
 
 /* ==========================================================================
@@ -1071,7 +1094,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/articles") {
     if (method === "GET") {
       const authed = isAuthenticated(req);
-      const all = readJSON(ARTICLES_FILE, []);
+      const raw = readJSON(ARTICLES_FILE, []);
+      const deadArt = new Set(readTombstones().articles);
+      const all = raw.filter(a => !deadArt.has(a.id));
+      if (all.length !== raw.length) writeJSON(ARTICLES_FILE, all);
       const visible = all.filter(a => authed || !isDraftArticle(a));
       // v37 · 公开列表只下发元数据；正文由阅读器按需从 /api/articles/:id 获取
       const out = authed ? visible : visible.map(a => {
@@ -1133,6 +1159,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "DELETE") {
       if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
       if (idx === -1) return sendJSON(req, res, 404, { ok: false, error: "文章不存在" });
+      addTombstone("articles", artMatch[1]);
       const removed = articles.splice(idx, 1)[0];
       writeJSON(ARTICLES_FILE, articles);
       return sendJSON(req, res, 200, { ok: true, removed });
@@ -1142,7 +1169,10 @@ const server = http.createServer(async (req, res) => {
   // 7. Moments API
   if (pathname === "/api/moments") {
     if (method === "GET") {
-      const moments = readJSON(MOMENTS_FILE, []);
+      const raw = readJSON(MOMENTS_FILE, []);
+      const deadMom = new Set(readTombstones().moments);
+      const moments = raw.filter(m => !deadMom.has(m.id));
+      if (moments.length !== raw.length) writeJSON(MOMENTS_FILE, moments);
       return sendJSON(req, res, 200, { ok: true, moments });
     }
     if (method === "POST") {
@@ -1181,6 +1211,7 @@ const server = http.createServer(async (req, res) => {
   if (momentMatch && method === "DELETE") {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
     const momId = momentMatch[1];
+    addTombstone("moments", momId);
     const moments = readJSON(MOMENTS_FILE, []);
     const idx = moments.findIndex((m) => m.id === momId);
     if (idx !== -1) {
@@ -1279,7 +1310,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/messages") {
     if (method === "GET") {
       // v37 · 分页：默认最新 50 条，上限 50，避免一次吐全量
-      const all = readJSON(MESSAGES_FILE, []);
+      const raw = readJSON(MESSAGES_FILE, []);
+      const deadMsg = new Set(readTombstones().messages);
+      const all = raw.filter(m => !deadMsg.has(m.id));
+      if (all.length !== raw.length) writeJSON(MESSAGES_FILE, all);
       const limit = Math.min(50, Math.max(1, parseInt(urlObj.searchParams.get("limit"), 10) || 50));
       const offset = Math.max(0, parseInt(urlObj.searchParams.get("offset"), 10) || 0);
       return sendJSON(req, res, 200, {
@@ -1401,6 +1435,7 @@ const server = http.createServer(async (req, res) => {
   if (msgMatch && method === "DELETE") {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
     const msgId = msgMatch[1];
+    addTombstone("messages", msgId);
     const messages = readJSON(MESSAGES_FILE, []);
     const idx = messages.findIndex((m) => m.id === msgId);
     if (idx !== -1) {
