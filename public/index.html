@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script>
     (function() {
-      var RELEASE_VER = '20261105_v24';
+      var RELEASE_VER = '20261105_v37';
       try {
         var current = localStorage.getItem('atelier_ver');
         if (current !== RELEASE_VER) {
@@ -41,7 +41,7 @@
   <title>Sxltx · 纸境工坊 · 沉思与造物</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="apple-touch-icon" href="/logo.png?v=20261105_v24">
+  <link rel="apple-touch-icon" href="/logo.png?v=20261105_v37">
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#fcfbf9">
   <meta name="description" content="Sxltx 的个人工坊与数字漫游手记。深度思考、极简交互与造物沉淀。">
@@ -59,12 +59,16 @@
   <meta property="og:title" content="Sxltx · 纸境工坊 · 沉思与造物">
   <meta property="og:description" content="Sxltx 的个人工坊与数字漫游手记。纯正一线工程实战复盘、现代原生 Web 架构与深度造物。">
   <meta property="og:url" content="https://hlat.top/">
-  <meta property="og:image" content="https://hlat.top/logo.png?v=20261105_v24">
+  <meta property="og:image" content="https://hlat.top/logo.png?v=20261105_v37">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:image" content="https://hlat.top/logo.png?v=20261105_v24">
+  <meta name="twitter:image" content="https://hlat.top/logo.png?v=20261105_v37">
   <meta name="twitter:title" content="Sxltx · 纸境工坊 · 沉思与造物">
   <meta name="twitter:description" content="Sxltx 的个人工坊与数字漫游手记。纯正一线工程实战复盘、现代原生 Web 架构与深度造物。">
-  <link rel="stylesheet" href="/style.css?v=20261105_v24">
+  <link rel="preload" as="image" href="/logo.png?v=20261105_v37" fetchpriority="high">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"WebSite","name":"Sxltx · 纸境工坊","url":"https://hlat.top/","description":"在微云之境，构筑自治的工程工作流与思想自留地。","inLanguage":"zh-CN","potentialAction":{"@type":"SearchAction","target":"https://hlat.top/?q={search_term_string}","query-input":"required name=search_term_string"}}
+  </script>
+  <link rel="stylesheet" href="/style.css?v=20261105_v37">
 
   <style id="head-typography-override">
     .featured-summary,
@@ -133,6 +137,7 @@
 
 </head>
 <body>
+  <a class="skip-link" href="#main-content">跳到正文</a>
   <!-- Reading Progress Line -->
   <div id="read-progress" class="read-progress-line" style="width: 0%;"></div>
 
@@ -143,7 +148,7 @@
   <header class="nav-dock-container">
     <nav class="nav-dock" aria-label="主导航">
       <a href="#" class="nav-brand" aria-label="返回顶部">
-        <img src="/logo.png?v=20261105_v22" alt="Sxltx" class="nav-brand-logo">
+        <img src="/logo.png?v=20261105_v37" alt="Sxltx" class="nav-brand-logo" decoding="async" fetchpriority="high">
         <span class="brand-serif">Sxltx</span>
         <span class="brand-sep" aria-hidden="true">/</span>
         <span class="brand-sub">纸境工坊</span>
@@ -158,6 +163,11 @@
       </div>
 
       <div class="nav-actions">
+        <!-- v26 · 稍后读纸签：只在收藏后才显出朱砂计数 -->
+        <button id="btn-bookmark-filter" class="icon-btn nav-bookmark-btn" type="button" title="稍后读纸签 · 仅看收藏 (快捷键 B)" aria-label="稍后读纸签筛选" aria-pressed="false">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"></path></svg>
+          <span id="bookmark-count" class="bookmark-count" aria-hidden="true">0</span>
+        </button>
         <a href="https://www.travellings.cn/go.html" target="_blank" rel="noopener" class="icon-btn nav-travellings-btn" title="开往·友链接力 (点击随机穿越至另一个独立博客)" aria-label="开往漫游">
           <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <rect x="4" y="3" width="16" height="15" rx="2"></rect>
@@ -199,13 +209,13 @@
   </header>
 
   <!-- Main Container -->
-  <main class="page-container">
+  <main class="page-container" id="main-content" tabindex="-1">
     
     <!-- Hero Section -->
     <section class="hero-section">
       <div class="hero-brand-row">
         <div class="hero-brand-avatar" title="Sxltx · 柯基与爱心徽章">
-          <img src="/logo.png?v=20261104_v22" alt="Sxltx" class="hero-avatar-img">
+          <img src="/logo.png?v=20261105_v37" alt="Sxltx" class="hero-avatar-img" decoding="async">
         </div>
         <div class="hero-status-pill">
           <span class="pulse-indicator">
@@ -246,6 +256,20 @@
           </div>
         </div>
       </div>
+
+      <!-- v33 · 此刻纸境：一行薄薄的「活着」的痕迹，不占纸面 -->
+      <div class="v33-now-bar" id="v33-now-bar" aria-live="polite">
+        <span class="v33-now-mark">此刻</span>
+        <span class="v33-now-item" id="v33-now-time">—</span>
+        <span class="v33-now-sep" aria-hidden="true">·</span>
+        <span class="v33-now-item" id="v33-now-fresh">近三日新墨统计中</span>
+        <span class="v33-now-sep" aria-hidden="true">·</span>
+        <span class="v33-now-item" id="v33-now-guests">纸境静候来客</span>
+        <span class="v33-now-sep is-v35" id="v35-read-sep" aria-hidden="true" hidden>·</span>
+        <span class="v33-now-item is-v35" id="v35-read-count" hidden></span>
+        <button type="button" class="v33-now-link" id="v33-now-draw" title="信手翻一页旧文（快捷键 R）">翻一页 ↗</button>
+        <button type="button" class="v33-now-link is-v35" id="v35-now-daily" title="今日运势 · 一日一签，点开才显">今日运势 ↗</button>
+      </div>
     </section>
 
     <!-- SECTION 1: ESSAYS -->
@@ -265,6 +289,14 @@
           <button class="cat-tab" data-cat="随笔">随笔</button>
           <button class="cat-tab" data-cat="思考">思考</button>
         </div>
+      </div>
+
+      <!-- v33 · 近三日纸窗：日期区间、条数、一键展阅旧卷 -->
+      <div class="v33-scope-bar" id="v33-scope-essays" aria-live="polite">
+        <span class="v33-scope-dot" aria-hidden="true"></span>
+        <span class="v33-scope-label" data-scope-label>近三日</span>
+        <span class="v33-scope-count" data-scope-count>装载中</span>
+        <button type="button" class="v33-scope-btn" data-scope-toggle="essays">展阅旧卷 ▾</button>
       </div>
 
       <!-- Featured Essay Card (Hero slot) -->
@@ -296,6 +328,15 @@
           <span class="sec-label">MOMENTS</span>
         </div>
         <div class="sec-note">随手记录的思考火花</div>
+      </div>
+
+      <!-- v33 · 近三日纸窗 -->
+      <div class="v33-scope-bar" id="v33-scope-moments" aria-live="polite">
+        <span class="v33-scope-dot" aria-hidden="true"></span>
+        <span class="v33-scope-label" data-scope-label>近三日</span>
+        <span class="v33-scope-count" data-scope-count>装载中</span>
+        <button type="button" class="v33-scope-btn" data-scope-toggle="moments">展阅旧卷 ▾</button>
+        <button type="button" class="v33-scope-btn is-v35" id="v35-board-open" title="本月最共鸣一笺 · 复用同感印计数">本月共鸣榜 ↗</button>
       </div>
 
       <div class="moments-timeline" id="moments-timeline-container">
@@ -558,6 +599,16 @@
           <button type="button" class="topic-chip" data-prefix="【灵感漫游】">灵感漫游</button>
         </div>
 
+        <!-- v35 · 主理人每日一问：一行薄条，回应聚合按需展开，不常占纸面 -->
+        <div class="v35-question-bar" id="v35-question-bar">
+          <span class="v35-q-mark">今日一问</span>
+          <span class="v35-q-text" id="v35-q-text">正在取题…</span>
+          <span class="v35-q-count" id="v35-q-count" hidden></span>
+          <button type="button" class="v35-q-btn" id="v35-q-answer">应一问 ↗</button>
+          <button type="button" class="v35-q-btn is-quiet" id="v35-q-echoes">看回应 ▾</button>
+        </div>
+        <div class="v35-q-echoes" id="v35-q-echoes-list" hidden></div>
+
         <!-- Comment Input Box -->
         <form class="guestbook-form" id="guestbook-form">
           <div class="form-inputs-row">
@@ -571,6 +622,15 @@
               </svg>
             </button>
           </div>
+          <!-- v26 · 此刻心境印：一枚小印，让留墨带上情绪 -->
+          <div class="mood-seal-row" id="mood-seal-row" role="group" aria-label="选择此刻心境">
+            <span class="mood-seal-label">此刻心境</span>
+            <button type="button" class="mood-seal active" data-mood="静" aria-pressed="true">静</button>
+            <button type="button" class="mood-seal" data-mood="思" aria-pressed="false">思</button>
+            <button type="button" class="mood-seal" data-mood="喜" aria-pressed="false">喜</button>
+            <button type="button" class="mood-seal" data-mood="问" aria-pressed="false">问</button>
+            <span class="mood-seal-hint" id="mood-seal-hint">静 · 会心一阅</span>
+          </div>
           <div class="guestbook-hint-row">
             <span class="guestbook-tip">✦ 留下真诚的交流与探讨，工坊即时回笔。</span>
             <span id="msg-char-count" class="char-count-hint">0 / 300</span>
@@ -581,6 +641,42 @@
         <div class="messages-wall" id="messages-wall">
           <!-- Injected via JS -->
           <div class="loading-skeleton">载入留言...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 6: VISITORS ATLAS · 来客图 / 时光地图 (v29) -->
+    <section id="atlas" class="content-section" data-spy="guestbook">
+      <div class="section-header-flex">
+        <div class="sec-title-wrap">
+          <span class="sec-num">06</span>
+          <h2 class="sec-title">来客图 · 时光</h2>
+          <span class="sec-label">VISITORS ATLAS</span>
+        </div>
+        <div class="sec-note" id="atlas-summary">正在铺展纸图…</div>
+      </div>
+
+      <div class="atlas-paper">
+        <div class="atlas-topline">
+          <div class="atlas-here" id="atlas-here">
+            <span class="atlas-here-seal" aria-hidden="true">✦</span>
+            <span id="atlas-here-text">正在辨认来处…</span>
+          </div>
+          <span class="atlas-privacy">只显来过的城 · 不记录 IP 与精确坐标</span>
+        </div>
+
+        <div class="atlas-grid" id="atlas-grid" role="list" aria-label="城市到访印章">
+          <span class="atlas-empty">素纸待印…</span>
+        </div>
+
+        <div class="atlas-timeline">
+          <div class="atlas-timeline-head">
+            <span class="atlas-timeline-title">时光刻痕</span>
+            <span class="atlas-timeline-sub">最近点亮的城</span>
+          </div>
+          <div class="atlas-timeline-track" id="atlas-timeline-track">
+            <span class="atlas-empty">尚无来客，静候第一枚印。</span>
+          </div>
         </div>
       </div>
     </section>
@@ -618,7 +714,7 @@
   </main>
 
   <!-- SEARCH MODAL (Spotlight / Raycast Style) -->
-  <div class="modal-overlay" id="search-modal" aria-hidden="true" style="display: none;">
+  <div class="modal-overlay" id="search-modal" role="dialog" aria-modal="true" aria-label="全站搜索" aria-hidden="true" style="display: none;">
     <div class="search-modal-box">
       <div class="search-input-wrap">
         <svg class="svg-icon search-lead-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -640,7 +736,7 @@
   </div>
 
   <!-- READER DRAWER (Full-screen Immersive Reading) -->
-  <div class="drawer-overlay" id="reader-overlay" aria-hidden="true" style="display: none;">
+  <div class="drawer-overlay" id="reader-overlay" role="dialog" aria-modal="true" aria-label="沉浸式阅读" aria-hidden="true" style="display: none;">
     <article class="reader-drawer" id="reader-drawer">
       <div class="drawer-toolbar">
         <div class="drawer-left">
@@ -952,8 +1048,8 @@
             <form id="form-change-pwd" class="settings-box">
               <h4>重置主理人密钥</h4>
               <div class="field-wrap">
-                <label>新管理密钥 (至少 4 位)</label>
-                <input type="password" id="cfg-new-pwd" placeholder="••••••••" required class="paper-input">
+                <label>新管理密钥 (至少 12 位，含字母与数字)</label>
+                <input type="password" id="cfg-new-pwd" placeholder="••••••••••••" required minlength="12" class="paper-input">
               </div>
               <button type="submit" class="paper-btn btn-secondary">更新密钥</button>
               <div id="pwd-change-msg" class="form-feedback"></div>
@@ -1012,10 +1108,24 @@
     </div>
   </div>
 
+  <!-- v26 · 纸境速查笺 / 墨句摘录簿 共用的一张素纸 -->
+  <div class="atelier-sheet-overlay" id="atelier-sheet" style="display:none;" aria-hidden="true">
+    <div class="atelier-sheet-box" role="dialog" aria-modal="true" aria-labelledby="atelier-sheet-title">
+      <div class="atelier-sheet-head">
+        <h2 class="atelier-sheet-title" id="atelier-sheet-title">纸境速查</h2>
+        <button type="button" id="btn-close-sheet" class="icon-btn" aria-label="关闭速查笺">
+          <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="atelier-sheet-body" id="atelier-sheet-body"></div>
+      <div class="atelier-sheet-foot">Esc 收起 · 纸境工坊</div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div id="toast-container" class="toast-container"></div>
 
-  <script src="/app.js?v=20261105_v24"></script>
+  <script src="/app.js?v=20261105_v37"></script>
   <!-- Back to top floating button -->
   <button id="btn-back-to-top" class="back-to-top-btn" title="平滑返回顶部" aria-label="返回顶部">
     <svg class="svg-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

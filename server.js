@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
@@ -13,21 +14,78 @@ const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 const ARTICLES_FILE = path.join(DATA_DIR, "articles.json");
 const MOMENTS_FILE = path.join(DATA_DIR, "moments.json");
 const MESSAGES_FILE = path.join(DATA_DIR, "messages.json");
+const RESONANCES_FILE = path.join(DATA_DIR, "resonances.json");
+const VISITS_FILE = path.join(DATA_DIR, "visits.json"); // v29 · 来客图：仅城市级聚合，不存 IP
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const SALT = "sxtx_atelier_salt_2026";
-function hashPassword(pwd) {
+const SALT = process.env.ATELIER_AUTH_SALT || "sxtx_atelier_salt_2026";
+// v37 · 令牌签名与旧口令哈希解耦：生产可注入独立强密钥，不影响 legacy 口令校验
+const TOKEN_SECRET = process.env.ATELIER_AUTH_TOKEN_SECRET || SALT;
+
+/* ==========================================================================
+   v37 · 口令存储：scrypt(随机盐) 为主，兼容旧版 sha256 并在首次成功登录时透明升级。
+   零依赖，仅用 Node 内置 crypto；单次校验约 40~80ms，配合登录限流阻断穷举。
+   ========================================================================== */
+const SCRYPT_OPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+function hashPassword(pwd) { // 旧格式兼容 / 首次配置的临时占位
   return crypto.createHash("sha256").update(pwd + SALT).digest("hex");
+}
+function scryptHash(pwd) {
+  return new Promise((resolve, reject) => {
+    const salt = crypto.randomBytes(16);
+    crypto.scrypt(String(pwd), salt, 64, SCRYPT_OPT, (err, key) => {
+      if (err) reject(err);
+      else resolve("scrypt$" + salt.toString("hex") + "$" + key.toString("hex"));
+    });
+  });
+}
+function verifyPassword(pwd, stored) {
+  const s = String(stored || "");
+  if (s.startsWith("scrypt$")) {
+    const parts = s.split("$");
+    if (parts.length !== 3) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      crypto.scrypt(String(pwd), Buffer.from(parts[1], "hex"), 64, SCRYPT_OPT, (err, key) => {
+        if (err) return resolve(false);
+        const ref = Buffer.from(parts[2], "hex");
+        resolve(ref.length === key.length && crypto.timingSafeEqual(ref, key));
+      });
+    });
+  }
+  // legacy: 定长比较，避免时序侧信道
+  const a = Buffer.from(hashPassword(pwd), "utf8");
+  const b = Buffer.from(s, "utf8");
+  return Promise.resolve(a.length === b.length && crypto.timingSafeEqual(a, b));
+}
+// v37 · 强口令策略：长度 ≥ 12，至少两类字符，且不在常见弱口令表内
+const WEAK_PASSWORDS = new Set([
+  "123456789012", "password123", "admin123456", "sxtx2026", "sxtx20262026",
+  "qwertyuiop12", "111111111111", "000000000000", "abcdefghijkl", "p@ssw0rd1234"
+]);
+function passwordPolicy(pwd) {
+  const s = String(pwd || "");
+  if (s.length < 12) return "管理密钥至少需要 12 位";
+  if (s.length > 128) return "管理密钥不得超过 128 位";
+  if (/\s/.test(s)) return "管理密钥不可包含空白字符";
+  let kinds = 0;
+  if (/[a-z]/.test(s)) kinds++;
+  if (/[A-Z]/.test(s)) kinds++;
+  if (/[0-9]/.test(s)) kinds++;
+  if (/[^a-zA-Z0-9]/.test(s)) kinds++;
+  if (kinds < 2) return "管理密钥需包含字母、数字或符号中的至少两类";
+  if (WEAK_PASSWORDS.has(s.toLowerCase())) return "该密钥过于常见，请换一个";
+  if (/^(.)\1+$/.test(s)) return "管理密钥不可为单一重复字符";
+  return null;
 }
 
 // Stateless HMAC Auth Token (Survives Server Restarts)
 function generateAuthToken() {
   const expiresAt = Date.now() + 30 * 24 * 3600 * 1000; // 30 days
   const payload = `admin:${expiresAt}`;
-  const sig = crypto.createHmac("sha256", SALT).update(payload).digest("hex");
+  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("hex");
   return Buffer.from(`${payload}:${sig}`).toString("base64");
 }
 
@@ -40,7 +98,7 @@ function verifyAuthToken(token) {
     const [user, expStr, sig] = parts;
     const exp = parseInt(expStr, 10);
     if (isNaN(exp) || Date.now() > exp) return false;
-    const expectedSig = crypto.createHmac("sha256", SALT).update(`${user}:${expStr}`).digest("hex");
+    const expectedSig = crypto.createHmac("sha256", TOKEN_SECRET).update(`${user}:${expStr}`).digest("hex");
     return sig === expectedSig;
   } catch (e) {
     return false;
@@ -50,8 +108,12 @@ function verifyAuthToken(token) {
 // Default config
 function getOrInitConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
+    // v37 · 不再内置固定默认口令；首次启动生成随机强密钥，只打印一次
+    const initialPwd = process.env.ATELIER_INITIAL_PASSWORD || crypto.randomBytes(15).toString("base64url");
+    const pwdSalt = crypto.randomBytes(16);
+    const pwdKey = crypto.scryptSync(initialPwd, pwdSalt, 64, SCRYPT_OPT);
     const defaultConfig = {
-      adminPasswordHash: hashPassword("sxtx2026"),
+      adminPasswordHash: "scrypt$" + pwdSalt.toString("hex") + "$" + pwdKey.toString("hex"),
       siteTitle: "Sxltx · 纸境工坊",
       siteSubtitle: "在微云之境，构筑自治的工程工作流与思想自留地。",
       author: "Sxltx",
@@ -59,6 +121,10 @@ function getOrInitConfig() {
       stampText: "纸境\nATELIER"
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2), "utf-8");
+    if (!process.env.ATELIER_INITIAL_PASSWORD) {
+      console.warn("\n[安全] 首次启动，初始管理密钥：" + initialPwd);
+      console.warn("[安全] 仅显示这一次，请立即登录后台修改。\n");
+    }
     return defaultConfig;
   }
   try {
@@ -81,57 +147,381 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
 }
 
-// Extract Real Client IP (Cloudflare & Reverse Proxy Guarded)
+/* ==========================================================================
+   v37 · 可信来源判定 + 统一滑动窗口限流 + GLM 预算闸门 + 回笔质量门禁
+   原则：转发头只在「来自可信反代」时采信；公网直连源站无法用伪造头绕过限流。
+   ========================================================================== */
+function normalizeIP(raw) {
+  let s = String((Array.isArray(raw) ? raw[0] : raw) || "").trim().split(",")[0].trim();
+  if (s.startsWith("::ffff:")) s = s.slice(7);
+  return s;
+}
+function isPrivateIP(ip) {
+  const s = normalizeIP(ip);
+  return !s || s === "::1" || s === "localhost" || /^127\./.test(s) || /^10\./.test(s) ||
+    /^192\.168\./.test(s) || /^172\.(1[6-9]|2\d|3[01])\./.test(s) || /^(fc|fd|fe80)/i.test(s);
+}
+function ipv4ToInt(ip) {
+  const p = String(ip).split(".");
+  if (p.length !== 4) return null;
+  let n = 0;
+  for (const x of p) {
+    const v = Number(x);
+    if (!Number.isInteger(v) || v < 0 || v > 255 || x === "") return null;
+    n = (n << 8) | v;
+  }
+  return n >>> 0;
+}
+function cidrContains(cidr, ip) {
+  const seg = String(cidr).split("/");
+  const bits = seg.length === 1 ? 32 : Number(seg[1]);
+  const a = ipv4ToInt(seg[0]), b = ipv4ToInt(ip);
+  if (a === null || b === null || !Number.isInteger(bits) || bits < 0 || bits > 32) return false;
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0;
+  return (a & mask) === (b & mask);
+}
+let _trustedCidrs = null;
+function trustedCidrs() {
+  if (_trustedCidrs) return _trustedCidrs;
+  let fromConfig = [];
+  try { const c = getOrInitConfig().trustedProxyCidrs; if (Array.isArray(c)) fromConfig = c; } catch (e) {}
+  const fromEnv = String(process.env.ATELIER_TRUSTED_PROXY_CIDRS || "").split(",");
+  _trustedCidrs = fromConfig.concat(fromEnv).map(x => String(x).trim()).filter(Boolean);
+  return _trustedCidrs;
+}
+function isTrustedPeer(peer) {
+  const ip = normalizeIP(peer);
+  if (isPrivateIP(ip)) return true;          // 本机 nginx / Caddy / 容器网关
+  return trustedCidrs().some(c => cidrContains(c, ip)); // 显式白名单（如 CF 回源段）
+}
+
+// Extract Real Client IP (never trust forwarding headers from untrusted peers)
 function getClientIP(req) {
-  const cfIP = req.headers["cf-connecting-ip"];
-  if (cfIP) return cfIP.trim();
-  const xff = req.headers["x-forwarded-for"];
-  if (xff) return xff.split(",")[0].trim();
-  const xReal = req.headers["x-real-ip"];
-  if (xReal) return xReal.trim();
-  return req.socket.remoteAddress || "127.0.0.1";
+  const peer = normalizeIP(req.socket.remoteAddress);
+  if (isTrustedPeer(peer)) {
+    const heads = [req.headers["cf-connecting-ip"], req.headers["x-forwarded-for"], req.headers["x-real-ip"]];
+    for (const raw of heads) {
+      const ip = normalizeIP(raw);
+      if (ip && ip.length <= 45 && /^[0-9a-fA-F.:]+$/.test(ip)) {
+        req.atelierIPSource = "proxy-header";
+        return ip;
+      }
+    }
+  }
+  req.atelierIPSource = "socket";
+  return peer || "127.0.0.1";
+}
+
+// 统一滑动窗口：被拒时不写入新时间戳，冷却可预期恢复
+const rateState = new Map();
+function checkRate(bucket, key, limit, windowMs) {
+  const now = Date.now();
+  const k = bucket + "|" + key;
+  let hits = (rateState.get(k) || []).filter(t => now - t < windowMs);
+  if (hits.length >= limit) {
+    rateState.set(k, hits);
+    return { allowed: false, retryAfter: Math.max(1, Math.ceil((hits[0] + windowMs - now) / 1000)) };
+  }
+  hits.push(now);
+  rateState.set(k, hits);
+  return { allowed: true, remaining: limit - hits.length };
+}
+function clearRate(bucket, key) { rateState.delete(bucket + "|" + key); }
+function imposeRate(req, res, check, message) {
+  if (check.allowed) return false;
+  res.setHeader("Retry-After", String(check.retryAfter || 1));
+  sendJSON(req, res, 429, {
+    ok: false, error: message || "请求过于频繁，请稍候再试", retryAfter: check.retryAfter
+  });
+  return true;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, arr] of rateState) {
+    const alive = arr.filter(t => now - t < 3600000);
+    if (!alive.length) rateState.delete(k); else rateState.set(k, alive);
+  }
+}, 300000).unref();
+
+// GLM 调用预算：并发 / 分钟 / 自然日三重上限，超限直接本地回笔，绝不阻塞留言
+const glmBudget = { inflight: 0, minute: [], day: "", dayCount: 0 };
+function acquireGLMSlot() {
+  const now = Date.now(), day = new Date().toISOString().slice(0, 10);
+  if (glmBudget.day !== day) { glmBudget.day = day; glmBudget.dayCount = 0; }
+  glmBudget.minute = glmBudget.minute.filter(t => now - t < 60000);
+  if (glmBudget.inflight >= 2 || glmBudget.minute.length >= 8 || glmBudget.dayCount >= 100) return false;
+  glmBudget.inflight++; glmBudget.minute.push(now); glmBudget.dayCount++;
+  return true;
+}
+function releaseGLMSlot() { glmBudget.inflight = Math.max(0, glmBudget.inflight - 1); }
+
+// 输入质量门禁：无实质内容不调用 GLM，避免对 "x"/"a"/"b" 之类的输入强行编造回复
+function shouldUseGLM(content) {
+  const s = String(content || "").trim();
+  if (s.length < 6) return false;
+  const compact = s.replace(/\s/g, "");
+  if (compact.length < 4 || new Set(compact).size < 3) return false;
+  if (!/[\u4e00-\u9fa5]/.test(s) && !/[a-zA-Z]{3,}/.test(s)) return false;
+  if (/^\d+[\W\d]*$/.test(s)) return false;
+  if (/^(test|测试|hello|hello world|asdf|qwerty|123456)\.?$/i.test(s)) return false;
+  return true;
+}
+// 输出清洗：拦截占位符与模板套话，判定不合格即降级
+function isTemplateEcho(text) {
+  const s = String(text || "");
+  if (s.length < 12 || s.length > 420) return true;
+  return /【\s*…\s*】|\[\s*…\s*\]|【具体|\[具体|具体操作步骤|希望这能帮到您|希望能帮到你|作为(一个)?\s*AI|结合实际项目经验|我在实际项目中遇到过|首先[，,].{0,20}其次[，,].{0,20}最后|注意事项[：:]/.test(s);
+}
+// 草稿 / 私密文章：未登录时一律不可见
+function isDraftArticle(a) {
+  return !!(a && (a.draft === true || a.status === "draft" || a.status === "private" || a.visibility === "private"));
+}
+function notFound(req, res) {
+  res.writeHead(404, {
+    "Content-Type": "text/plain; charset=utf-8",
+    "Cache-Control": "private, no-store",
+    "X-Atelier-Origin": "app",
+    "X-Content-Type-Options": "nosniff"
+  });
+  res.end("404 Not Found");
+}
+
+/* ==========================================================================
+   v29 · 来客图 / 地域欢迎语：访客 IP 归属地
+   零依赖、纯 Node 内置 https；优先级 = CDN 地理头 → 国内合规公共接口 → 优雅降级。
+   隐私边界：IP 只在内存中做短时缓存与哈希去重，绝不落盘；
+             visits.json 只保存「省 / 城市 + 聚合计数 + 时间」，无 IP、无精确坐标、无个人标识。
+   ========================================================================== */
+const PLACE_UNKNOWN = "远方";
+const ipPlaceCache = new Map();  // ip -> { province, city, place, known, at }（内存，1h）
+const visitSeenMap = new Map();  // sha256(ip + 当天) -> 时间戳（连明文 IP 都不留）
+const COUNTRY_NAMES = {
+  CN: "中国", HK: "中国香港", MO: "中国澳门", TW: "中国台湾",
+  SG: "新加坡", JP: "日本", KR: "韩国", US: "美国", CA: "加拿大",
+  GB: "英国", DE: "德国", FR: "法国", AU: "澳大利亚", MY: "马来西亚"
+};
+
+function isLocalIP(ip) {
+  const s = String(ip || "").replace(/^::ffff:/, "");
+  return !s || s === "127.0.0.1" || s === "::1" || s === "localhost" ||
+    /^10\./.test(s) || /^192\.168\./.test(s) || /^172\.(1[6-9]|2\d|3[01])\./.test(s);
+}
+
+// Node 将 HTTP 头按 latin1 解码，CDN 若注入 UTF-8 中文地名会变成乱码；此处还原
+function decodeHeaderValue(v) {
+  let s = String(v == null ? "" : v).trim();
+  if (!s) return "";
+  if (s.indexOf("%") >= 0) {
+    try { s = decodeURIComponent(s); } catch (_) { /* 原样保留 */ }
+  }
+  if (/[^\x00-\x7F]/.test(s)) {
+    try {
+      const restored = Buffer.from(s, "latin1").toString("utf8");
+      if (!/\uFFFD/.test(restored)) return restored;
+    } catch (_) { /* 原样保留 */ }
+  }
+  return s;
+}
+
+function cleanRegion(s) {
+  return String(s || "").trim()
+    .replace(/(维吾尔自治区|壮族自治区|回族自治区|特别行政区|自治区|自治州|地区|省|市|盟)$/g, "")
+    .replace(/\s+/g, "") || "";
+}
+
+// CDN 常以英文拼音回传地名；统一折回中文，并明确港澳台称谓
+const GEO_ALIASES = {
+  "hong kong": "中国香港", hongkong: "中国香港", hk: "中国香港",
+  macao: "中国澳门", macau: "中国澳门", mo: "中国澳门",
+  taiwan: "中国台湾", taipei: "中国台北", tw: "中国台湾",
+  beijing: "北京", shanghai: "上海", tianjin: "天津", chongqing: "重庆",
+  weifang: "潍坊", jinan: "济南", qingdao: "青岛",
+  shenzhen: "深圳", guangzhou: "广州", hangzhou: "杭州", nanjing: "南京",
+  suzhou: "苏州", chengdu: "成都", wuhan: "武汉", xian: "西安",
+  zhengzhou: "郑州", xiamen: "厦门", changsha: "长沙",
+  shijiazhuang: "石家庄", hefei: "合肥", shenyang: "沈阳",
+  kunming: "昆明", nanning: "南宁",
+  shandong: "山东", guangdong: "广东", zhejiang: "浙江", jiangsu: "江苏",
+  sichuan: "四川", hubei: "湖北", shaanxi: "陕西", henan: "河南",
+  fujian: "福建", hunan: "湖南", hebei: "河北", anhui: "安徽",
+  liaoning: "辽宁", yunnan: "云南", guangxi: "广西",
+  cn: "中国", sg: "新加坡", jp: "日本", us: "美国"
+};
+
+function normalizeGeoName(v, fromHeader) {
+  // 仅 CDN 请求头需要 latin1 → utf8 还原；内部字符串本身已是正确 UTF-8
+  const s = fromHeader ? decodeHeaderValue(v) : String(v == null ? "" : v).trim();
+  const alias = GEO_ALIASES[s.toLowerCase()];
+  return alias || cleanRegion(s);
+}
+
+function makePlace(rawProvince, rawCity, fromHeader) {
+  let p = normalizeGeoName(rawProvince, fromHeader);
+  let c = normalizeGeoName(rawCity, fromHeader);
+  if (/^[A-Z]{2}$/.test(p)) p = COUNTRY_NAMES[p] || "海外";
+  if (/^[A-Z]{2}$/.test(c)) c = COUNTRY_NAMES[c] || "海外";
+  if (!p && !c) return { province: "", city: "", place: PLACE_UNKNOWN, known: false };
+  if (p && c && p !== c && !c.startsWith(p)) {
+    return { province: p, city: c, place: `${p}·${c}`, known: true };
+  }
+  const only = c || p;
+  return { province: p, city: c, place: only, known: true };
+}
+
+function placeFromHeaders(req) {
+  const h = req.headers || {};
+  const city = h["cf-ipcity"] || h["eo-geo-city"] || h["x-geo-city"] || h["x-city"];
+  const region = h["cf-region"] || h["x-geo-province"] || h["x-region"] ||
+                 h["cf-ipcountry"] || h["eo-geo-country"];
+  if (!city && !region) return null;
+  return makePlace(region, city, true);
+}
+
+// 国内公共 IP 归属接口（无需 key），带硬超时；任何异常都静默降级，不阻塞留言
+function fetchPlace(ip) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v); } };
+    const url = `https://whois.pconline.com.cn/ipJson.jsp?json=true&ip=${encodeURIComponent(ip)}`;
+    const request = https.get(url, {
+      timeout: 1800,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; Atelier/1.0)", "Accept": "*/*" }
+    }, (resp) => {
+      if (resp.statusCode !== 200) { resp.resume(); return finish(null); }
+      const chunks = [];
+      resp.on("data", (c) => chunks.push(c));
+      resp.on("end", () => {
+        try {
+          const raw = Buffer.concat(chunks);
+          let text = raw.toString("utf8");
+          if (/\uFFFD/.test(text) && typeof TextDecoder === "function") {
+            try { text = new TextDecoder("gbk").decode(raw); } catch (_) { /* 保持 utf8 */ }
+          }
+          const d = JSON.parse(text);
+          if (!d || d.err) return finish(null);
+          finish(makePlace(d.pro, d.city));
+        } catch (_) { finish(null); }
+      });
+      resp.on("error", () => finish(null));
+    });
+    request.on("timeout", () => { request.destroy(); finish(null); });
+    request.on("error", () => finish(null));
+  });
+}
+
+async function resolvePlace(req) {
+  const fromHeader = placeFromHeaders(req);
+  if (fromHeader && fromHeader.known) return fromHeader;
+  const ip = getClientIP(req);
+  if (isLocalIP(ip)) {
+    const cfg = getOrInitConfig();
+    if (cfg.homeCity) return makePlace(cfg.homeProvince || "", cfg.homeCity);
+    return { province: "", city: "", place: "案前", known: false };
+  }
+  const cached = ipPlaceCache.get(ip);
+  if (cached && Date.now() - cached.at < 3600000) return cached;
+  const result = (await fetchPlace(ip)) || fromHeader ||
+    { province: "", city: "", place: PLACE_UNKNOWN, known: false };
+  ipPlaceCache.set(ip, Object.assign({}, result, { at: Date.now() }));
+  if (ipPlaceCache.size > 1000) ipPlaceCache.clear();
+  return result;
+}
+
+function readVisits() {
+  const d = readJSON(VISITS_FILE, {});
+  return {
+    cities: Array.isArray(d.cities) ? d.cities : [],
+    recent: Array.isArray(d.recent) ? d.recent : []
+  };
+}
+
+function visitsSummary(data) {
+  return {
+    total: data.cities.length,
+    visits: data.cities.reduce((sum, c) => sum + (Number(c.count) || 0), 0)
+  };
+}
+
+// 同一访客 6 小时内只点亮一次，避免刷新刷屏；未知地域不入库
+function recordVisit(place, req) {
+  const data = readVisits();
+  if (!place || !place.known) return { data, isNew: false, skipped: true };
+  const day = new Date().toISOString().slice(0, 10);
+  const seenKey = crypto.createHash("sha256")
+    .update(String(getClientIP(req)) + day).digest("hex");
+  const nowMs = Date.now();
+  if (nowMs - (visitSeenMap.get(seenKey) || 0) < 6 * 3600000) {
+    return { data, isNew: false, skipped: true };
+  }
+  visitSeenMap.set(seenKey, nowMs);
+  if (visitSeenMap.size > 3000) visitSeenMap.clear();
+
+  const key = `${place.province}|${place.city}`;
+  const now = new Date().toISOString();
+  const hit = data.cities.find((c) => c.key === key);
+  const isNew = !hit;
+  if (hit) {
+    hit.count = (Number(hit.count) || 0) + 1;
+    hit.last = now;
+    hit.province = place.province;
+    hit.city = place.city;
+  } else {
+    data.cities.push({
+      key, province: place.province, city: place.city,
+      count: 1, first: now, last: now
+    });
+  }
+  data.recent.unshift({ key, province: place.province, city: place.city, time: now });
+  if (data.recent.length > 32) data.recent.length = 32;
+  writeJSON(VISITS_FILE, data);
+  return { data, isNew, skipped: false };
+}
+
+// 工坊回笔首句：欢迎来自某地的墨友（GLM 与本地语义引擎统一适用）
+function prependGreeting(content, place) {
+  const greeting = `欢迎来自${place || PLACE_UNKNOWN}的墨友，`;
+  let body = String(content || "").trim().replace(/^(敬复|致)【[^】]*】：\s*/, "");
+  if (body.indexOf("欢迎来自") === 0) return body;
+  return greeting + body;
 }
 
 // In-Memory Sliding-Window Rate Limiter for Messages
 const messageRateMap = new Map(); // IP -> { lastPostTime, count, windowStart, lastContentHash }
-function checkMessageRateLimit(ip, content) {
+
+// Lightweight per-target cooldown for resonance & visitor replies (v26)
+const lightRateMap = new Map();
+function checkLightRate(key, cooldownMs = 30000) {
   const now = Date.now();
-  const record = messageRateMap.get(ip) || { lastPostTime: 0, count: 0, windowStart: now, lastContentHash: "" };
-
-  // Rule 1: 15-second mandatory cooldown between consecutive posts
-  if (now - record.lastPostTime < 15000) {
-    const waitSec = Math.ceil((15000 - (now - record.lastPostTime)) / 1000);
-    return { allowed: false, error: `心诚则灵，留言请沉思静气。请等待 ${waitSec} 秒后再试` };
+  const last = lightRateMap.get(key) || 0;
+  if (now - last < cooldownMs) return false;
+  lightRateMap.set(key, now);
+  if (lightRateMap.size > 2000) {
+    for (const [k, t] of lightRateMap) if (now - t > 3600000) lightRateMap.delete(k);
   }
-
-  // Rule 2: 10-minute sliding window max 5 messages
-  if (now - record.windowStart > 10 * 60 * 1000) {
-    record.count = 0;
-    record.windowStart = now;
-  }
-  if (record.count >= 5) {
-    return { allowed: false, error: "您在短时间内留墨较多，工坊已收到您的心意，请稍歇片刻。" };
-  }
-
-  // Rule 3: Deduplication
-  const contentHash = crypto.createHash("md5").update(content.trim()).digest("hex");
-  if (record.lastContentHash === contentHash && (now - record.lastPostTime < 120000)) {
-    return { allowed: false, error: "请勿重复提交相同内容的墨痕。" };
-  }
-
-  // Update record on success
-  record.lastPostTime = now;
-  record.count += 1;
-  record.lastContentHash = contentHash;
-  messageRateMap.set(ip, record);
-
-  // Clean old entries if map grows too large
-  if (messageRateMap.size > 2000) {
-    for (const [k, v] of messageRateMap.entries()) {
-      if (now - v.lastPostTime > 3600000) messageRateMap.delete(k);
-    }
-  }
-
+  return true;
+}
+function checkMessageRateLimit(ip, content) {
+  // 标准滑动窗口：拒绝时不续期，恢复时间可预期（替代旧版累积式冷却）
+  const perIp = checkRate("msg:ip", ip, 3, 10 * 60 * 1000);
+  if (!perIp.allowed) return {
+    allowed: false, retryAfter: perIp.retryAfter,
+    error: `留墨稍密，请静候 ${perIp.retryAfter} 秒再续一笔`
+  };
+  const global = checkRate("msg:global", "*", 30, 10 * 60 * 1000);
+  if (!global.allowed) return {
+    allowed: false, retryAfter: global.retryAfter,
+    error: "此刻留墨较多，工坊稍歇，请稍候再试"
+  };
+  const cool = checkRate("msg:cool", ip, 1, 15000);
+  if (!cool.allowed) return {
+    allowed: false, retryAfter: cool.retryAfter,
+    error: `请静候 ${cool.retryAfter} 秒再落第二笔`
+  };
+  const digest = crypto.createHash("md5").update(String(content).trim()).digest("hex");
+  const dup = checkRate("msg:dup:" + digest, ip, 1, 120000);
+  if (!dup.allowed) return {
+    allowed: false, retryAfter: dup.retryAfter, error: "请勿重复提交相同内容的墨痕。"
+  };
   return { allowed: true };
 }
 
@@ -179,7 +569,7 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
     res.writeHead(304, {
       "ETag": etag,
       "Cache-Control": isCacheable ? "public, max-age=31536000, immutable" : "no-cache, must-revalidate",
-      "Vary": "Accept-Encoding"
+      "Vary": "Origin, Accept-Encoding"
     });
     res.end();
     return;
@@ -188,7 +578,7 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
   // 1. Full Production-Grade Security Headers
   const headers = {
     "Content-Type": contentType,
-    "Vary": "Accept-Encoding",
+    "Vary": "Origin, Accept-Encoding",
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "SAMEORIGIN",
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
@@ -269,7 +659,7 @@ function parseBody(req) {
 }
 
 // Dynamic RSS 2.0 Generator (Always up to date with 100% articles)
-function generateDynamicRSS() {
+function generateDynamicRSS(full = false) {
   const articles = readJSON(ARTICLES_FILE, []);
   const config = getOrInitConfig();
   const siteUrl = "https://hlat.top";
@@ -288,12 +678,13 @@ function generateDynamicRSS() {
       <category>${category}</category>
       <pubDate>${pubDate}</pubDate>
       <description><![CDATA[${art.summary || art.title}]]></description>
+      ${full ? `<content:encoded><![CDATA[${art.content || art.summary || ""}]]></content:encoded>` : ""}
       <author>sxtx@hlat.top (${config.author || "Sxltx"})</author>
     </item>`;
   }).join("\n");
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"${full ? ' xmlns:content="http://purl.org/rss/1.0/modules/content/"' : ''}>
   <channel>
     <title>${config.siteTitle || "Sxltx · 纸境工坊"}</title>
     <link>${siteUrl}</link>
@@ -347,7 +738,10 @@ function renderArticlePage(req, res, article) {
 
   const siteUrl = "https://hlat.top";
   const postUrl = `${siteUrl}/article/${article.slug || article.id}`;
-  const ogImgUrl = `${siteUrl}/og/${article.slug || article.id}.png`;
+  const ogSlug = article.slug || article.id;
+  const ogFile = [ogSlug + ".png", article.id + ".png", "default.png"]
+    .find(n => fs.existsSync(path.join(PUBLIC_DIR, "og", n))) || "default.png";
+  const ogImgUrl = `${siteUrl}/og/${ogFile}`;
   const cleanTitle = `${article.title} · Sxltx 纸境工坊`;
   const cleanDesc = article.summary || `${article.title} - Sxltx 的独立个人工坊思考与造物沉淀。`;
 
@@ -403,7 +797,20 @@ function renderArticlePage(req, res, article) {
   }
   </script>
   `;
-  html = html.replace("</head>", `${schemaOrg}\n</head>`);
+  const breadcrumbSchema = `
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "纸境工坊", "item": "https://hlat.top/"},
+      {"@type": "ListItem", "position": 2, "name": ${JSON.stringify(article.category || "文墨")}, "item": "https://hlat.top/#essays"},
+      {"@type": "ListItem", "position": 3, "name": ${JSON.stringify(article.title)}, "item": ${JSON.stringify(postUrl)}}
+    ]
+  }
+  </script>
+  `;
+  html = html.replace("</head>", `${schemaOrg}\n${breadcrumbSchema}\n</head>`);
 
   // 7. Prerender Content into #reader-title, #reader-summary and #reader-content
   html = html.replace(/<h1[^>]*id="reader-title"[^>]*><\/h1>/i, `<h1 class="drawer-title" id="reader-title">${article.title}</h1>`);
@@ -442,14 +849,34 @@ const MIME_TYPES = {
   ".xml": "application/xml; charset=utf-8"
 };
 
+const CORS_HOSTS = /^(localhost|127\.0\.0\.1|hlat\.top|.*\.hlat\.top|hlat\.xyz|.*\.hlat\.xyz)$/i;
+function corsAllowedOrigin(req) {
+  const origin = String(req.headers.origin || "");
+  if (!origin) return "";
+  try {
+    const u = new URL(origin);
+    if ((u.protocol === "https:" || u.protocol === "http:") && CORS_HOSTS.test(u.hostname)) return origin;
+  } catch (e) {}
+  return "";
+}
+
 const server = http.createServer(async (req, res) => {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  // v37 · 应用来源标记：一眼区分 Cloudflare 层 error 1000 与应用自身响应
+  res.setHeader("X-Atelier-Origin", "app");
+
+  // v37 · CORS 白名单回显。当前鉴权含 Cookie 会话，绝不再使用通配 *；
+  //        且明确不设置 Allow-Credentials，避免将来改会话方式时漏出。
+  const allowOrigin = corsAllowedOrigin(req);
+  res.setHeader("Vary", "Origin, Accept-Encoding");
+  if (allowOrigin) {
+    res.setHeader("Access-Control-Allow-Origin", allowOrigin);
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Max-Age", "600");
+  }
 
   if (req.method === "OPTIONS") {
-    res.writeHead(204);
+    res.writeHead(204, { "X-Atelier-Origin": "app" });
     res.end();
     return;
   }
@@ -458,9 +885,21 @@ const server = http.createServer(async (req, res) => {
   const pathname = urlObj.pathname;
   const method = req.method;
 
+  // v37 · 链路诊断端点：不含任何主机指纹，只用于确认请求是否到达应用层
+  if (pathname === "/api/ping" && method === "GET") {
+    getClientIP(req);
+    return sendJSON(req, res, 200, { ok: true, app: "atelier", layer: "application", ipSource: req.atelierIPSource });
+  }
+
+  // v37 · 所有 API 统一滑动窗口限流；登录与写操作另有更严的独立闸门
+  if (pathname.startsWith("/api/")) {
+    const gate = checkRate("api:global", getClientIP(req), 180, 60000);
+    if (imposeRate(req, res, gate, "请求频率超出上限，请稍候再试")) return;
+  }
+
   // 1. Dynamic RSS Feed (Real-time, Never Cached by Proxy)
   if (pathname === "/rss.xml" && method === "GET") {
-    const rssContent = generateDynamicRSS();
+    const rssContent = generateDynamicRSS(urlObj.searchParams.get("full") === "1");
     return sendResponse(req, res, 200, "application/xml; charset=utf-8", rssContent, false);
   }
 
@@ -476,7 +915,7 @@ const server = http.createServer(async (req, res) => {
     const slug = decodeURIComponent(articleRouteMatch[1]);
     const articles = readJSON(ARTICLES_FILE, []);
     const art = articles.find(a => (a.slug && a.slug === slug) || a.id === slug);
-    if (art) {
+    if (art && (isAuthenticated(req) || !isDraftArticle(art))) {
       return renderArticlePage(req, res, art);
     }
   }
@@ -487,18 +926,54 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(req, res, 200, { authenticated: isAuthenticated(req) });
   }
 
-  // 2. Auth Login
+  // 2. Auth Login —— v37 三层限流 + scrypt 校验 + 旧哈希透明升级
   if (pathname === "/api/auth/login" && method === "POST") {
+    const ip = getClientIP(req);
+
+    // v37 · 账号级失败闸门：完全不依赖 IP，换 IP / 伪造 CF-Connecting-IP 也无法重置。
+    //         攻击者借伪造头绕过 per-IP 限流时，这里是最后一道硬闸。
+    const FAIL_WINDOW = 5 * 60 * 1000;
+    const failedBefore = (rateState.get("login:globalfail|*") || [])
+      .filter(t => Date.now() - t < FAIL_WINDOW);
+    if (failedBefore.length >= 8) {
+      const wait = Math.max(1, Math.ceil((failedBefore[0] + FAIL_WINDOW - Date.now()) / 1000));
+      res.setHeader("Retry-After", String(wait));
+      return sendJSON(req, res, 429, {
+        ok: false, error: "登录失败次数过多，工坊暂时闭门，请稍后再试", retryAfter: wait
+      });
+    }
+
+    const perIp = checkRate("login:attempt", ip, 8, 15 * 60 * 1000);
+    if (imposeRate(req, res, perIp, "登录尝试次数过多，请稍后再试")) return;
+    const globalGate = checkRate("login:global", "*", 40, 15 * 60 * 1000);
+    if (imposeRate(req, res, globalGate, "登录请求过于频繁，请稍候再试")) return;
+
     const body = await parseBody(req);
     const config = getOrInitConfig();
-    const inputHash = hashPassword(body.password || "");
-    if (inputHash === config.adminPasswordHash) {
+    const pwd = String(body.password || "");
+    const ok = await verifyPassword(pwd, config.adminPasswordHash);
+    if (ok) {
+      clearRate("login:attempt", ip);
+      clearRate("login:fail", ip);
+      clearRate("login:globalfail", "*");
+      // 旧版 sha256 存储：首次成功登录后透明升级为 scrypt
+      if (!String(config.adminPasswordHash || "").startsWith("scrypt$")) {
+        try {
+          config.adminPasswordHash = await scryptHash(pwd);
+          writeJSON(CONFIG_FILE, config);
+          console.log("[安全] 管理口令哈希已升级为 scrypt");
+        } catch (e) { console.warn("[安全] 口令哈希升级失败:", e.message); }
+      }
       const token = generateAuthToken();
       res.setHeader("Set-Cookie", `atelier_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
       return sendJSON(req, res, 200, { ok: true, token });
-    } else {
-      return sendJSON(req, res, 401, { ok: false, error: "口令错误" });
     }
+    const fails = checkRate("login:fail", ip, 5, 15 * 60 * 1000);
+    checkRate("login:globalfail", "*", 8, FAIL_WINDOW);
+    return sendJSON(req, res, 401, {
+      ok: false, error: "口令错误",
+      ...(fails.allowed ? {} : { hint: "连续失败较多，请稍后再试" })
+    });
   }
 
   // 3. Auth Logout
@@ -511,13 +986,12 @@ const server = http.createServer(async (req, res) => {
   if (pathname === "/api/auth/password" && method === "POST") {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
     const body = await parseBody(req);
-    if (!body.newPassword || body.newPassword.length < 4) {
-      return sendJSON(req, res, 400, { ok: false, error: "新密码至少需要4个字符" });
-    }
+    const policyError = passwordPolicy(body.newPassword);
+    if (policyError) return sendJSON(req, res, 400, { ok: false, error: policyError });
     const config = getOrInitConfig();
-    config.adminPasswordHash = hashPassword(body.newPassword);
+    config.adminPasswordHash = await scryptHash(String(body.newPassword));
     writeJSON(CONFIG_FILE, config);
-    return sendJSON(req, res, 200, { ok: true, message: "管理口令修改成功" });
+    return sendJSON(req, res, 200, { ok: true, message: "管理口令修改成功，请重新登录" });
   }
 
   // 5. Config (Public Read, Protected Write)
@@ -531,7 +1005,11 @@ const server = http.createServer(async (req, res) => {
         bio: config.bio || "",
         stampText: config.stampText || "纸境\nATELIER",
         hasGlmKey: !!(config.glmApiKey || process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY),
-        glmApiKeyMasked: config.glmApiKey ? (config.glmApiKey.slice(0, 4) + '••••' + config.glmApiKey.slice(-4)) : ''
+        // v37 · 不再对外吐任何密钥片段：智谱是 id.secret 两段式，首尾四位足以缩小范围
+        // v35 · 主理人每日一问题池。缺配置时前端回退到内置十二问，零新增依赖。
+        dailyQuestions: Array.isArray(config.dailyQuestions)
+          ? config.dailyQuestions.filter(q => typeof q === "string" && q.trim()).map(q => q.trim().slice(0, 60))
+          : []
       };
       return sendJSON(req, res, 200, publicConfig, false);
     }
@@ -550,11 +1028,58 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 5.5 Resonance Seals (v26) — 一枚朱砂印，按文章计数
+  if (pathname === "/api/resonances" && method === "GET") {
+    return sendJSON(req, res, 200, { ok: true, counts: readJSON(RESONANCES_FILE, {}) });
+  }
+  const resonateMatch = pathname.match(/^\/api\/articles\/([^/]+)\/resonate$/);
+  if (resonateMatch && method === "POST") {
+    const artId = decodeURIComponent(resonateMatch[1]);
+    const allArticles = readJSON(ARTICLES_FILE, []);
+    if (!allArticles.some(a => a.id === artId || a.slug === artId)) {
+      return sendJSON(req, res, 404, { ok: false, error: "文章不存在" });
+    }
+    if (!checkLightRate("res:" + getClientIP(req) + ":" + artId, 60000)) {
+      return sendJSON(req, res, 429, { ok: false, error: "心意已收到，请稍歇片刻" });
+    }
+    const counts = readJSON(RESONANCES_FILE, {});
+    counts[artId] = (Number(counts[artId]) || 0) + 1;
+    writeJSON(RESONANCES_FILE, counts);
+    return sendJSON(req, res, 200, { ok: true, count: counts[artId] });
+  }
+
+  // 5.6 Visitors Atlas (v29) — 到访即点亮城市，只保存城市级聚合
+  if (pathname === "/api/visits" && method === "GET") {
+    const data = readVisits();
+    return sendJSON(req, res, 200, Object.assign({ ok: true }, data, visitsSummary(data)));
+  }
+  if (pathname === "/api/visit" && method === "POST") {
+    const place = await resolvePlace(req);
+    const result = recordVisit(place, req);
+    return sendJSON(req, res, 200, Object.assign({
+      ok: true,
+      place: place.place,
+      province: place.province,
+      city: place.city,
+      known: !!place.known,
+      isNew: result.isNew,
+      skipped: result.skipped
+    }, result.data, visitsSummary(result.data)));
+  }
+
   // 6. Articles API
   if (pathname === "/api/articles") {
     if (method === "GET") {
-      const articles = readJSON(ARTICLES_FILE, []);
-      return sendJSON(req, res, 200, { ok: true, articles });
+      const authed = isAuthenticated(req);
+      const all = readJSON(ARTICLES_FILE, []);
+      const visible = all.filter(a => authed || !isDraftArticle(a));
+      // v37 · 公开列表只下发元数据；正文由阅读器按需从 /api/articles/:id 获取
+      const out = authed ? visible : visible.map(a => {
+        const view = Object.assign({}, a);
+        delete view.content;
+        return view;
+      });
+      return sendJSON(req, res, 200, { ok: true, articles: out, total: visible.length, full: authed });
     }
     if (method === "POST") {
       if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
@@ -586,6 +1111,9 @@ const server = http.createServer(async (req, res) => {
 
     if (method === "GET") {
       if (idx === -1) return sendJSON(req, res, 404, { ok: false, error: "文章不存在" });
+      if (!isAuthenticated(req) && isDraftArticle(articles[idx])) {
+        return sendJSON(req, res, 404, { ok: false, error: "文章不存在" });
+      }
       return sendJSON(req, res, 200, { ok: true, article: articles[idx] });
     }
     if (method === "PUT") {
@@ -634,6 +1162,21 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 7.1 v33 · 微语同感印：一枚轻印，计数落在 moments.json，不存任何访客身份
+  const momentResMatch = pathname.match(/^\/api\/moments\/([^/]+)\/resonate$/);
+  if (momentResMatch && method === "POST") {
+    const momId = decodeURIComponent(momentResMatch[1]);
+    if (!checkLightRate("mres:" + getClientIP(req) + ":" + momId, 6 * 3600000)) {
+      return sendJSON(req, res, 429, { ok: false, error: "这一印已留过，稍后再来" });
+    }
+    const momentList = readJSON(MOMENTS_FILE, []);
+    const mIdx = momentList.findIndex((m) => m.id === momId);
+    if (mIdx === -1) return sendJSON(req, res, 404, { ok: false, error: "闪念不存在" });
+    momentList[mIdx].resonances = (Number(momentList[mIdx].resonances) || 0) + 1;
+    writeJSON(MOMENTS_FILE, momentList);
+    return sendJSON(req, res, 200, { ok: true, count: momentList[mIdx].resonances });
+  }
+
   const momentMatch = pathname.match(/^\/api\/moments\/([^/]+)$/);
   if (momentMatch && method === "DELETE") {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
@@ -652,8 +1195,17 @@ const server = http.createServer(async (req, res) => {
     const text = (content || "").toLowerCase();
     const config = getOrInitConfig();
     const glmKey = process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || config.glmApiKey;
+    // v37 · 短内容 / 灌水 / 预算超限时，只落一笔克制的收讫，不编造话题
+    const brief = () => ({
+      author: "工坊回笔",
+      content: "见字如面，墨迹已收。若愿意多写几句，我再细细回笔。",
+      time: new Date().toISOString()
+    });
 
-    if (glmKey) {
+    // v37 · 无实质内容直接收讫，不调 GLM、不套语义模板（避免答非所问）
+    if (!shouldUseGLM(content)) return brief();
+
+    if (glmKey && acquireGLMSlot()) {
       try {
         const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
           method: "POST",
@@ -666,7 +1218,7 @@ const server = http.createServer(async (req, res) => {
             messages: [
               {
                 role: "system",
-                content: "你是独立技术博客「纸境工坊」的主理人Sxltx。工坊技术栈：Node.js极简原生服务、轻量云主机4核8G、Cloudflare全球隧道直连、腾讯云EdgeOne加速、严格禁用stale-if-error死锁、前端Auto-Bust版本指纹自愈。你在博客留言薄（Guestbook）上给访客回墨。准则：1.【切中主题，针对性强】：必须针对访客提到的具体问题、技术话题或感悟做实质性回应。如果是提问，必须结合你的真实工程实践给出干货解答，严禁答非所问；2.【拒绝假大空与AI虚假套话】：严禁使用“茶香一盏待君再续前缘”、“水墨丹青”、“字字如金”等假大空古风废话。说话要像一个真正动手写代码、懂工程实战、真诚谦逊的活人技术博主；3.【务实克制】：语气自然真诚，条理清晰，字数控制在80~180字之间。"
+                content: "你是独立技术博客「纸境工坊」的主理人，正在留言簿给访客回一笔。准则：1.【只回应真实内容】：仅针对访客确实写到的具体问题、话题或感受作答。若内容空泛、过短、看不出话题，只回一句克制的邀请（如「墨已收下，若愿意多说几句，我再回笔」），绝不推测话题、绝不替访客编造问题、绝不杜撰自己亲历的调试或部署。2.【禁止模板腔】：严禁「结合实际项目经验」「我在实际项目中遇到过」「首先／其次／最后」这类套话，严禁输出【…】等方括号占位符，严禁假大空古风辞藻。3.【务实克制】：没有把握就如实说；访客没提问就不要强行给技术方案。本站是零依赖 Node 原生服务，仅在访客明确提及相关技术时才可提及。语气自然真诚，60~150 字。"
               },
               {
                 role: "user",
@@ -674,26 +1226,29 @@ const server = http.createServer(async (req, res) => {
               }
             ],
             temperature: 0.4,
-            max_tokens: 300
+            max_tokens: 240
           }),
-          signal: AbortSignal.timeout(9000)
+          signal: AbortSignal.timeout(6000)
         });
 
         if (resp.ok) {
           const data = await resp.json();
           const aiReply = data?.choices?.[0]?.message?.content?.trim();
-          if (aiReply) {
+          if (aiReply && !isTemplateEcho(aiReply)) {
             return {
               author: "工坊回笔 · GLM",
               content: aiReply,
               time: new Date().toISOString()
             };
           }
+          if (aiReply) console.warn("[GLM] 回复命中模板痕迹，已降级为本地回笔");
         } else {
           console.warn("[GLM] API call failed with status", resp.status);
         }
       } catch (err) {
         console.warn("[GLM] Error invoking GLM API:", err.message);
+      } finally {
+        releaseGLMSlot();
       }
     }
 
@@ -702,7 +1257,7 @@ const server = http.createServer(async (req, res) => {
     const isQuestion = text.includes("？") || text.includes("?") || text.includes("怎么") || text.includes("如何") || text.includes("请教") || text.includes("为什么") || text.includes("何解");
 
     if (isQuestion) {
-      echoContent = `敬复【${author || '墨友'}】：感谢您的深入探讨。关于您提及的具体工程细节与疑问，工坊已妥善归档入卷；因涉及架构深层实现，稍后主理人会在控制台为您补充详尽复盘，欢迎持续交流。`;
+      echoContent = `敬复【${author || '墨友'}】：这一问已收下。工坊会把相关实践整理成文，若你愿意补充具体场景，我再就那一段细说。`;
     } else if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
       echoContent = `致【${author || '墨友'}】：见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。`;
     } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络") || text.includes("cdn") || text.includes("缓存")) {
@@ -723,8 +1278,14 @@ const server = http.createServer(async (req, res) => {
   // 8. Messages (Guestbook) API with Advanced Anti-Spam Rate Limiting & Honeypot
   if (pathname === "/api/messages") {
     if (method === "GET") {
-      const messages = readJSON(MESSAGES_FILE, []);
-      return sendJSON(req, res, 200, { ok: true, messages });
+      // v37 · 分页：默认最新 50 条，上限 50，避免一次吐全量
+      const all = readJSON(MESSAGES_FILE, []);
+      const limit = Math.min(50, Math.max(1, parseInt(urlObj.searchParams.get("limit"), 10) || 50));
+      const offset = Math.max(0, parseInt(urlObj.searchParams.get("offset"), 10) || 0);
+      return sendJSON(req, res, 200, {
+        ok: true, messages: all.slice(offset, offset + limit),
+        total: all.length, limit: limit, offset: offset
+      });
     }
     if (method === "POST") {
       const body = await parseBody(req);
@@ -742,22 +1303,35 @@ const server = http.createServer(async (req, res) => {
       const clientIP = getClientIP(req);
       const rateCheck = checkMessageRateLimit(clientIP, body.content);
       if (!rateCheck.allowed) {
-        return sendJSON(req, res, 429, { ok: false, error: rateCheck.error });
+        if (rateCheck.retryAfter) res.setHeader("Retry-After", String(rateCheck.retryAfter));
+        return sendJSON(req, res, 429, { ok: false, error: rateCheck.error, retryAfter: rateCheck.retryAfter });
       }
 
+      const place = await resolvePlace(req);
       const messages = readJSON(MESSAGES_FILE, []);
       const echoData = await generateSmartEcho(body.content, body.author);
+      // v29 · 回笔首句先致意访客当前所在城市
+      echoData.content = prependGreeting(echoData.content, place.place);
+      recordVisit(place, req);
       const newMsg = {
         id: "msg_" + Date.now().toString(36),
         author: body.author ? String(body.author).trim().slice(0, 30) : "无名墨友",
         content: String(body.content).trim().slice(0, 500),
         time: new Date().toISOString(),
-        echo: echoData
+        location: place.known ? place.place : "",
+        echo: echoData,
+        ...(["静", "思", "喜", "问"].includes(body.mood) ? { mood: body.mood } : {}),
+        // v35 · 每日一问：只记问题标识与题目文字，便于前端按话题聚合，不记任何身份信息
+        ...(body.questionId ? {
+          questionId: String(body.questionId).slice(0, 24),
+          questionText: String(body.questionText || "").slice(0, 60)
+        } : {}),
+        visitorReplies: []
       };
       messages.unshift(newMsg);
       if (messages.length > 200) messages.length = 200;
       writeJSON(MESSAGES_FILE, messages);
-      return sendJSON(req, res, 201, { ok: true, message: newMsg });
+      return sendJSON(req, res, 201, { ok: true, message: newMsg, place: place.place });
     }
   }
 
@@ -785,6 +1359,44 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(req, res, 200, { ok: true, message: messages[idx] });
   }
 
+  // Visitor-to-visitor threaded replies (v26) — 让留墨之间也能彼此回响
+  const guestReplyMatch = pathname.match(/^\/api\/messages\/([^/]+)\/guest-reply$/);
+  if (guestReplyMatch && method === "POST") {
+    const body = await parseBody(req);
+    if (body.website || body.honeypot || body.hp_token) {
+      return sendJSON(req, res, 200, { ok: true, ignored: true });
+    }
+    const content = String(body.content || "").trim().slice(0, 200);
+    if (!content) return sendJSON(req, res, 400, { ok: false, error: "回笔不能为空" });
+    if (!checkLightRate("gre:" + getClientIP(req), 15000)) {
+      return sendJSON(req, res, 429, { ok: false, error: "请稍歇片刻再附一笔" });
+    }
+    const messages = readJSON(MESSAGES_FILE, []);
+    const idx = messages.findIndex(m => m.id === guestReplyMatch[1]);
+    if (idx === -1) return sendJSON(req, res, 404, { ok: false, error: "留言不存在" });
+    if (!Array.isArray(messages[idx].visitorReplies)) messages[idx].visitorReplies = [];
+    const thread = messages[idx].visitorReplies;
+    if (thread.length >= 12) {
+      return sendJSON(req, res, 429, { ok: false, error: "这条留墨的回响已满，欢迎另起一笔" });
+    }
+    // v35 · 盖楼：replyTo 必须指向同一条留墨下已存在的一层；quote 只留被引用文字的短摘
+    const parentId = body.replyTo ? String(body.replyTo).slice(0, 40) : "";
+    if (parentId && !thread.some(r => r.id === parentId)) {
+      return sendJSON(req, res, 400, { ok: false, error: "被引的一层已不在" });
+    }
+    const reply = {
+      id: "vr_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+      author: body.author ? String(body.author).trim().slice(0, 20) : "过路墨友",
+      content,
+      time: new Date().toISOString(),
+      ...(parentId ? { replyTo: parentId } : {}),
+      ...(body.quote ? { quote: String(body.quote).trim().slice(0, 70) } : {})
+    };
+    thread.push(reply);
+    writeJSON(MESSAGES_FILE, messages);
+    return sendJSON(req, res, 201, { ok: true, reply, message: messages[idx] });
+  }
+
   const msgMatch = pathname.match(/^\/api\/messages\/([^/]+)$/);
   if (msgMatch && method === "DELETE") {
     if (!isAuthenticated(req)) return sendJSON(req, res, 403, { ok: false, error: "未授权" });
@@ -800,6 +1412,10 @@ const server = http.createServer(async (req, res) => {
 
   // 9. Status API
   if (pathname === "/api/status" && method === "GET") {
+    // v37 · 主机指纹（hostname / 内核 / CPU / 内存 / uptime / node 版本）只对已登录主理人开放
+    if (!isAuthenticated(req)) {
+      return sendJSON(req, res, 200, { ok: true, status: "running", limited: true });
+    }
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
     const usedMem = totalMem - freeMem;
@@ -830,36 +1446,40 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
-  // Static File Serving
-  let relativePath = pathname === "/" ? "index.html" : pathname;
-  // Fallback for SPA routing /admin
-  if (pathname === "/admin") {
-    relativePath = "index.html";
+  // v37 · 未命中的 API 路由一律 404，不再被 SPA 兜底成 200 首页
+  if (pathname.startsWith("/api/")) {
+    return sendJSON(req, res, 404, { ok: false, error: "接口不存在" });
   }
 
-  let filePath = path.join(PUBLIC_DIR, relativePath);
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
-    filePath = path.join(PUBLIC_DIR, "index.html");
-  }
+  // v37 · 敏感路径明确 404：/.git/HEAD、/server.js 等不再误判为「有源码泄露」
+  const SENSITIVE_PATH = /^\/(?:\.git|\.env|\.ssh|data|scripts|systemd|node_modules)(?:\/|$)|^\/(?:server\.js|package(?:-lock)?\.json|curator_daemon\.py|watchdog_v2\.py|README\.md|config\.json)$/i;
+  if (SENSITIVE_PATH.test(pathname) || /\/\.[^/]+/.test(pathname)) return notFound(req, res);
 
-  if (fs.existsSync(filePath)) {
-    const ext = path.extname(filePath).toLowerCase();
-    const mime = MIME_TYPES[ext] || "application/octet-stream";
-    const isDynamicMeta = pathname === "/sitemap.xml" || pathname === "/robots.txt" || pathname === "/rss.xml";
-    const isCacheable = ext !== ".html" && pathname !== "/sw.js" && !isDynamicMeta;
-    fs.readFile(filePath, (err, content) => {
-      if (err) {
-        res.writeHead(500);
-        res.end("Internal Server Error");
-      } else {
-        sendResponse(req, res, 200, mime, content, isCacheable);
-      }
-    });
-    return;
-  }
+  // Static File Serving —— 白名单式 SPA 兜底 + 路径穿越防护
+  const spaRoute = pathname === "/" || pathname === "/admin";
+  if (pathname === "/admin") res.setHeader("X-Robots-Tag", "noindex, nofollow");
 
-  res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end("404 Not Found");
+  let decoded = spaRoute ? "index.html" : pathname;
+  try { decoded = decodeURIComponent(decoded); } catch (e) { return notFound(req, res); }
+  if (decoded.indexOf("\0") !== -1 || decoded.indexOf("..") !== -1) return notFound(req, res);
+
+  let filePath = path.resolve(PUBLIC_DIR, "." + (decoded.startsWith("/") ? decoded : "/" + decoded));
+  if (spaRoute) filePath = path.resolve(PUBLIC_DIR, "index.html");
+  const inside = filePath === PUBLIC_DIR || filePath.startsWith(PUBLIC_DIR + path.sep);
+  if (!inside || !fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) return notFound(req, res);
+
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = MIME_TYPES[ext] || "application/octet-stream";
+  const isDynamicMeta = pathname === "/sitemap.xml" || pathname === "/robots.txt" || pathname === "/rss.xml";
+  const isCacheable = ext !== ".html" && pathname !== "/sw.js" && !isDynamicMeta;
+  fs.readFile(filePath, (err, content) => {
+    if (err) {
+      res.writeHead(500, { "X-Atelier-Origin": "app" });
+      res.end("Internal Server Error");
+    } else {
+      sendResponse(req, res, 200, mime, content, isCacheable);
+    }
+  });
 });
 
 server.listen(PORT, "0.0.0.0", () => {
