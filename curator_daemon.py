@@ -17,6 +17,19 @@ Sxtx · 纸境工坊 · 自动自治守卫、外宣矩阵与策展引擎 (Atelie
 
 import os
 import sys
+import io
+
+# Force UTF-8 encoding across non-UTF8 Linux shells (e.g. CentOS 7 default ASCII)
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    elif sys.version_info[0] >= 3:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 import json
 import time
 import urllib.request
@@ -128,6 +141,7 @@ def update_syndication_and_seo():
     </item>"""
         rss_items.append(item_xml)
 
+    rss_items_str = "\n".join(rss_items)
     rss_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
@@ -137,7 +151,7 @@ def update_syndication_and_seo():
     <language>zh-CN</language>
     <lastBuildDate>{datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")}</lastBuildDate>
     <atom:link href="https://hlat.top/rss.xml" rel="self" type="application/rss+xml"/>
-{"\n".join(rss_items)}
+{rss_items_str}
   </channel>
 </rss>
 """

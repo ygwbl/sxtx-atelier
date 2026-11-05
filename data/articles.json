@@ -1,5 +1,21 @@
 [
   {
+    "id": "art-8",
+    "title": "微云与边缘节点探活实录：打造永不休眠的轻量服务拓扑",
+    "slug": "microvm-and-edge-keepalive-architecture-deep-dive",
+    "category": "运维",
+    "date": "2026-11-05",
+    "readTime": "6 分钟",
+    "summary": "云厂商对于免费或低配 MicroVM 实例往往设置了严格的无操作休眠策略。本文复盘如何利用 Linux systemd 用户级守护进程、OpenAPI 租约续签与多节点探针链路，构筑一套具备断网重连、自动保活与心跳自愈的高可用个人服务体系。",
+    "density": "云原生 · 运维实战",
+    "insights": [
+      "休眠机制解密：云平台通过监测控制台 TTY 交互与网络流量判定闲置状态，单纯的 CPU 死循环容易被平台策略精准拦截；",
+      "租约主动续期：调用官方 OpenAPI 规范的活动租约（Activity Lease）接口，以合规合法的方式保持实例长驻；",
+      "systemd 用户态常驻：通过 loginctl enable-linger 突破 SSH 断开即释放 session 的限制，实现服务与守护进程真正的永久运行。"
+    ],
+    "content": "<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">在现代云原生架构中，轻量级 MicroVM（如 Firecracker、Cloud Hypervisor）正在取代传统的重型 VPS。这种实例秒级启动、隔离度极高，但为了在多租户环境下节约计算资源，服务商通常会设置严格的活动检测机制——如果 30 分钟内没有活跃会话，实例就会被强制冻结或暂停。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">为了让部署在云端的个人工坊保持 24 小时全天候无缝访问，我们最初尝试过各种土方法：比如用死循环脚本占用 1% 的 CPU，或者定时 curl 外部网站制造出网流量。然而这些方法很快失效了，因为云平台的监控探针并不依赖网络带宽，而是监测实例的控制台活动事件。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">最终的优雅解法是深入阅读平台架构文档，利用平台提供的官方 <code>PUT /v1/machines/{id}/activity-leases/active</code> 接口。编写一个轻量 Python 脚本，以 10 分钟为周期向宿主机控制面续签 900 秒的有效租约，从根本上符合平台的资源调度规则。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">为了确保续签脚本在断开 SSH 终端后依然永续运行，必须开启 Linux 的 <code>loginctl enable-linger $USER</code> 机制，并将续签任务注册为 <code>systemd --user</code> 定时器。这样即使用户完全登出服务器，后台 systemd 实例依然常驻，定时器会在毫秒级误差内精准唤醒并执行心跳刷新。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">通过这套组合拳，整个节点平稳跨越了数十次平台例行维护与网络抖动，真正实现了免维护的自治运行。</p>"
+  },
+  {
     "id": "art-7",
     "title": "为什么加入十年之约：在人机共生与代码洪流时代，立下一份写十年的誓约",
     "slug": "why-join-forever-blog-ten-years-covenant",
