@@ -7810,3 +7810,307 @@ html.no-motion .moment-entry.is-v35-pulse { animation: none !important; }
 /* ======================== v37 · 完 ======================== */
 
 
+
+/* ==========================================================================
+   v38 · 素纸质感层 (Takeo Paper Tactility Layer)
+   零依赖 / 仅做加法 / 三主题同源
+   A 暖墨色板：以松烟墨与竹尾素纸取代冷调锌灰
+   B 纸面：双层纤维纹理 + 纸边微光
+   C 卡片：纸张叠压感（内高光 + 柔和落影），hover 不再变黑框
+   D 按钮：墨块按钮，修正暗境主按钮白字白底不可读
+   E 标题与正文：字距、行距、标点挤压、悬挂朱砂
+   F 细节：滚动条、分隔线、图片、输入框
+   ========================================================================== */
+
+/* ── A. 暖墨色板 ───────────────────────────────────────────────────── */
+:root {
+  --bg-paper: #f8f6f1;            /* 竹尾素纸：微暖象牙 */
+  --bg-card: #fdfcf9;
+  --bg-subtle: #f1eee6;
+  --bg-hover: #ebe7dc;
+
+  --border-line: rgba(120, 104, 80, 0.18);
+  --border-subtle: rgba(120, 104, 80, 0.10);
+  --border-focus: #2b2722;
+
+  --text-title: #1f1c18;          /* 松烟墨 */
+  --text-body: #34302a;
+  --text-muted: #6b645a;
+  --text-faint: #958c7f;
+
+  --brand-seal: #a8322b;          /* 朱砂，略收饱和 */
+  --brand-seal-bg: rgba(168, 50, 43, 0.06);
+
+  --ink-btn: #2b2722;
+  --ink-btn-hover: #1a1714;
+  --ink-btn-text: #f8f6f1;
+
+  --hairline: rgba(80, 64, 40, 0.10);
+  --seal-wash: rgba(168, 50, 43, 0.06);
+  --paper-edge: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --shadow-sm: 0 1px 1px rgba(60, 45, 25, 0.03), 0 2px 6px -2px rgba(60, 45, 25, 0.05);
+  --shadow-card: 0 1px 2px rgba(60, 45, 25, 0.04), 0 12px 28px -14px rgba(60, 45, 25, 0.12);
+  --lift-shadow: 0 1px 2px rgba(60, 45, 25, 0.04), 0 18px 36px -18px rgba(60, 45, 25, 0.20);
+  --dock-bg-scrolled: rgba(248, 246, 241, 0.92);
+  --radius-card: 12px;
+}
+
+:root[data-theme="dark"] {
+  --bg-paper: #151412;            /* 墨池：带一点暖褐，不是纯黑灰 */
+  --bg-card: #1c1b18;
+  --bg-subtle: #24221f;
+  --bg-hover: #2d2b27;
+  --border-line: rgba(240, 230, 210, 0.11);
+  --border-subtle: rgba(240, 230, 210, 0.06);
+  --text-title: #f1ece2;
+  --text-body: #d4cdc0;
+  --text-muted: #9a9284;
+  --text-faint: #6c665c;
+  --brand-seal: #e07a6e;
+  --brand-seal-bg: rgba(224, 122, 110, 0.12);
+  --ink-btn: #ece5d8;
+  --ink-btn-hover: #fffaf0;
+  --ink-btn-text: #1c1b18;
+  --hairline: rgba(240, 230, 210, 0.09);
+  --seal-wash: rgba(224, 122, 110, 0.11);
+  --paper-edge: inset 0 1px 0 rgba(255, 245, 225, 0.04);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 28px -14px rgba(0, 0, 0, 0.6);
+  --lift-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 18px 36px -18px rgba(0, 0, 0, 0.75);
+  --dock-bg-scrolled: rgba(28, 27, 24, 0.92);
+}
+
+:root[data-theme="sepia"] {
+  --ink-btn: #3a2d1d;
+  --ink-btn-hover: #2a2014;
+  --ink-btn-text: #faf5eb;
+  --paper-edge: inset 0 1px 0 rgba(255, 252, 240, 0.6);
+}
+
+/* ── B. 纸面：纤维纹理 + 极淡的四周暗角，模拟纸张在光下的层次 ────────── */
+body {
+  font-feature-settings: "palt" 0, "kern" 1;
+  font-kerning: normal;
+}
+
+.paper-grain {
+  opacity: 0.045;
+  mix-blend-mode: multiply;
+}
+
+[data-theme="dark"] .paper-grain {
+  opacity: 0.035;
+  mix-blend-mode: screen;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 255, 255, 0.55) 0%, transparent 60%),
+    radial-gradient(140% 100% at 50% 100%, rgba(120, 100, 70, 0.05) 0%, transparent 70%);
+}
+
+[data-theme="dark"] body::before {
+  background:
+    radial-gradient(120% 80% at 50% 0%, rgba(255, 240, 210, 0.025) 0%, transparent 60%),
+    radial-gradient(140% 100% at 50% 100%, rgba(0, 0, 0, 0.35) 0%, transparent 70%);
+}
+
+[data-theme="sepia"] body::before {
+  background: radial-gradient(140% 100% at 50% 100%, rgba(110, 80, 40, 0.07) 0%, transparent 70%);
+}
+
+/* ── C. 卡片：纸张叠压感 ─────────────────────────────────────────── */
+.artifact-card,
+.tl-card,
+.metric-card,
+.featured-essay-card {
+  background: var(--bg-card);
+  border-color: var(--border-line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--paper-edge), var(--shadow-sm);
+  transition: transform 320ms var(--ease-spring), box-shadow 320ms var(--ease-spring),
+              border-color 240ms ease, background-color 240ms ease;
+}
+
+.artifact-card:hover,
+.tl-card:hover,
+.metric-card:hover,
+.featured-essay-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--brand-seal) 28%, var(--border-line));
+  box-shadow: var(--paper-edge), var(--lift-shadow) !important;
+}
+
+.nav-dock {
+  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
+  border-color: var(--border-line);
+  box-shadow: var(--paper-edge), var(--shadow-card);
+  backdrop-filter: saturate(1.2) blur(16px);
+  -webkit-backdrop-filter: saturate(1.2) blur(16px);
+}
+
+[data-theme="dark"] .nav-dock,
+[data-theme="sepia"] .nav-dock {
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+}
+
+/* ── D. 墨块按钮（同时修正暗境主按钮白字压白底） ─────────────────── */
+.paper-btn {
+  border-radius: 8px;
+  letter-spacing: 0.04em;
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease,
+              transform 200ms var(--ease-spring), box-shadow 200ms var(--ease-spring);
+}
+
+.btn-primary,
+.paper-btn.btn-primary {
+  background: var(--ink-btn);
+  color: var(--ink-btn-text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+.btn-primary:hover,
+.paper-btn.btn-primary:hover {
+  background: var(--ink-btn-hover);
+  color: var(--ink-btn-text);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 6px 14px -6px rgba(0, 0, 0, 0.3);
+}
+
+.paper-btn:active {
+  transform: translateY(0) scale(0.985);
+}
+
+.btn-secondary:hover {
+  border-color: color-mix(in srgb, var(--text-title) 35%, var(--border-line));
+}
+
+/* ── E. 标题与正文 ───────────────────────────────────────────────── */
+.hero-title {
+  letter-spacing: 0.02em;          /* 中文大标题负字距显挤，改为微张 */
+  font-weight: 600;
+}
+
+.hero-subtitle {
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.sec-title {
+  font-family: var(--font-serif);
+  letter-spacing: 0.04em;
+}
+
+.sec-num {
+  color: var(--brand-seal);
+  opacity: 0.85;
+}
+
+#reader-content {
+  font-family: var(--font-serif);
+  color: var(--text-body);
+  letter-spacing: 0.025em;
+  hanging-punctuation: allow-end;
+  -webkit-hyphens: auto;
+}
+
+#reader-content p.reader-para,
+#reader-content p {
+  line-height: 1.95;
+  margin-bottom: 1.4rem;
+  text-indent: 2em;
+}
+
+#reader-content h2,
+#reader-content h3 {
+  letter-spacing: 0.04em;
+  color: var(--text-title);
+}
+
+#reader-content blockquote {
+  background: var(--bg-subtle);
+  border-left: 2px solid var(--brand-seal);
+  border-radius: 0 8px 8px 0;
+  color: var(--text-muted);
+}
+
+#reader-content a {
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.28em;
+  text-decoration-color: color-mix(in srgb, var(--brand-seal) 45%, transparent);
+  transition: text-decoration-color 200ms ease, color 200ms ease;
+}
+
+#reader-content a:hover {
+  text-decoration-color: var(--brand-seal);
+}
+
+#reader-content img {
+  border-radius: 8px;
+  box-shadow: 0 0 0 1px var(--hairline), var(--shadow-sm);
+}
+
+/* ── F. 细节 ─────────────────────────────────────────────────────── */
+hr {
+  border: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border-line) 18%, var(--border-line) 82%, transparent);
+}
+
+.paper-input,
+.paper-textarea {
+  background: var(--bg-card);
+  border-color: var(--border-line);
+  box-shadow: inset 0 1px 2px rgba(60, 45, 25, 0.04);
+  transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.paper-input:focus,
+.paper-textarea:focus {
+  border-color: color-mix(in srgb, var(--brand-seal) 50%, var(--border-line));
+  box-shadow: inset 0 1px 2px rgba(60, 45, 25, 0.04), 0 0 0 3px var(--seal-wash);
+}
+
+.paper-input::placeholder,
+.paper-textarea::placeholder {
+  color: var(--text-faint);
+  letter-spacing: 0.03em;
+}
+
+html {
+  scrollbar-color: color-mix(in srgb, var(--text-faint) 55%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-faint) 45%, transparent);
+  border: 3px solid var(--bg-paper);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-muted) 60%, transparent);
+}
+
+.read-progress-line {
+  height: 2px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--brand-seal) 60%, transparent), var(--brand-seal));
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  :root { --radius-card: 10px; }
+  .artifact-card:hover,
+  .tl-card:hover,
+  .metric-card:hover,
+  .featured-essay-card:hover { transform: none; }
+}
+
+/* ======================== v38 · 素纸质感层 · 完 ======================== */
