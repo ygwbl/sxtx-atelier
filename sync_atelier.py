@@ -161,7 +161,11 @@ def sync_code_and_config():
         "data/resonances.json",
         "data/tombstones.json",
         "public/intro.mp4",
-        "public/intro-poster.jpg"
+        "public/intro-poster.jpg",
+        "public/sitemap.xml",
+        "public/og/default.png",
+        "public/og/art-8.png",
+        "public/og/microvm-and-edge-keepalive-architecture-deep-dive.png"
     ]
     needs_restart = False
     for rel in files:

@@ -745,6 +745,7 @@ ${itemsXML}
 function generateDynamicSitemap() {
   const articles = readJSON(ARTICLES_FILE, []);
   const siteUrl = "https://hlat.top";
+  const mirrorUrl = "https://blog.hlat.xyz";
 
   const urlElements = [
     `  <url>
@@ -752,10 +753,16 @@ function generateDynamicSitemap() {
     <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>`,
+    `  <url>
+    <loc>${mirrorUrl}/</loc>
+    <lastmod>${new Date().toISOString().slice(0, 10)}</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
   </url>`
   ];
 
-  articles.forEach(art => {
+  articles.filter(art => !isDraftArticle(art)).forEach(art => {
     urlElements.push(`  <url>
     <loc>${siteUrl}/article/${art.slug || art.id}</loc>
     <lastmod>${art.date || new Date().toISOString().slice(0, 10)}</lastmod>
