@@ -778,7 +778,8 @@ function sendResponse(req, res, statusCode, contentType, body, isCacheable = fal
   }
 
   const acceptEncoding = req.headers["accept-encoding"] || "";
-  if (acceptEncoding.includes("gzip") && buffer.length > 384) {
+  const isCompressible = /^(text\/|application\/(javascript|json|xml|rss\+xml)|image\/svg\+xml)/.test(contentType);
+  if (isCompressible && acceptEncoding.includes("gzip") && buffer.length > 384) {
     zlib.gzip(buffer, (err, compressed) => {
       if (!err) {
         headers["Content-Encoding"] = "gzip";

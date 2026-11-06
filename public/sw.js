@@ -1,4 +1,4 @@
-// Sxltx Atelier Cache Busting & Self-Unregister Worker v6
+// Sxltx Atelier Cache Busting & Self-Unregister Worker v7
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -14,8 +14,4 @@ self.addEventListener('activate', (event) => {
     })
   );
 });
-
-self.addEventListener('fetch', (event) => {
-  // Direct network pass-through without any cache interception
-  event.respondWith(fetch(event.request, { cache: 'no-store' }));
-});
+// No fetch interception: all network requests pass directly to native browser networking
