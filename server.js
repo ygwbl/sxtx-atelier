@@ -279,23 +279,35 @@ function acquireGLMSlot() {
 function releaseGLMSlot() { glmBudget.inflight = Math.max(0, glmBudget.inflight - 1); }
 
 // 输入质量门禁：无实质内容不调用 GLM，避免对 "x"/"a"/"b" 之类的输入强行编造回复
+// v40 · 输入质量门禁：无实质内容不调用 GLM，避免对单字、符号或灌水强行编造回复
+// v40 · 输入质量门禁：无实质内容不调用 GLM，避免对单字、符号或灌水强行编造回复
+// v40 · 输入质量门禁：过滤单字、纯符号、灌水，仅对有实质语义的留墨调用 GLM
 function shouldUseGLM(content) {
   const s = String(content || "").trim();
-  if (s.length < 6) return false;
-  const compact = s.replace(/\s/g, "");
-  if (compact.length < 4 || new Set(compact).size < 3) return false;
-  if (!/[\u4e00-\u9fa5]/.test(s) && !/[a-zA-Z]{3,}/.test(s)) return false;
-  if (/^\d+[\W\d]*$/.test(s)) return false;
-  if (/^(test|测试|hello|hello world|asdf|qwerty|123456)\.?$/i.test(s)) return false;
+  if (s.length < 3) return false;
+  if (!/[\u4e00-\u9fa5]/.test(s) && !/[a-zA-Z]{2,}/.test(s)) return false;
+  const letters = s.replace(/[^\u4e00-\u9fa5a-zA-Z]/g, "");
+  if (letters.length < 2) return false;
+  if (new Set(letters).size < 2 && letters.length <= 4) return false; // 如 "哈哈哈", "aaaa"
+  if (/^(test|测试|hello|asdf|qwerty|1234|666|888|aaa|bbb|ccc)\.?$/i.test(letters)) return false;
   return true;
 }
-// 输出清洗：拦截占位符与模板套话，判定不合格即降级
+
+// v40 · 输出质量门禁：严厉拦截 AI 假大空、客服套话、占位符与废话小作文
 function isTemplateEcho(text) {
-  const s = String(text || "");
-  if (s.length < 12 || s.length > 420) return true;
-  return /【\s*…\s*】|\[\s*…\s*\]|【具体|\[具体|具体操作步骤|希望这能帮到您|希望能帮到你|作为(一个)?\s*AI|结合实际项目经验|我在实际项目中遇到过|首先[，,].{0,20}其次[，,].{0,20}最后|注意事项[：:]/.test(s);
+  const s = String(text || "").trim();
+  if (s.length < 6 || s.length > 220) return true; // 异常过短或超过220字注水小作文直接拦截
+  // 拦截模板痕迹
+  if (/【\s*…\s*】|\[\s*…\s*\]|【具体|\[具体|具体操作步骤|注意事项[：:]|希望这能(对您|对你|有所)?帮助|希望能帮到|作为(一个)?\s*AI|实际项目中遇到过|结合实际项目|首先[，,].{0,20}其次/.test(s)) {
+    return true;
+  }
+  // 拦截假大空鸡汤与泛滥辞藻
+  if (/在这个快节奏的时代|水滴石穿的力量|无论在生活还是工作中|让我们携手|砥砺前行|不忘初心/.test(s)) {
+    return true;
+  }
+  return false;
 }
-// 草稿 / 私密文章：未登录时一律不可见
+
 function isDraftArticle(a) {
   return !!(a && (a.draft === true || a.status === "draft" || a.status === "private" || a.visibility === "private"));
 }
@@ -501,14 +513,18 @@ function recordVisit(place, req) {
 }
 
 // 工坊回笔首句：欢迎来自某地的墨友（GLM 与本地语义引擎统一适用）
-function prependGreeting(content, place) {
-  const greeting = `欢迎来自${place || PLACE_UNKNOWN}的墨友，`;
-  let body = String(content || "").trim().replace(/^(敬复|致)【[^】]*】：\s*/, "");
-  if (body.indexOf("欢迎来自") === 0) return body;
-  return greeting + body;
+// v40 · 地域润色：仅在地域明确已知（非"远方"）且原句未出现时自然融入，彻底杜绝机械套娃
+function decorateGreeting(content, place) {
+  let s = String(content || "").trim();
+  if (!place || place === PLACE_UNKNOWN || place === "局域网" || place === "本地") return s;
+  if (s.includes(place)) return s;
+  // 短句且不含其他称谓时，可自然点缀
+  if (s.length <= 45 && !s.startsWith("欢迎来自") && !s.includes("老乡") && !s.includes("同道")) {
+    return `来自${place}的墨友，` + s;
+  }
+  return s;
 }
 
-// In-Memory Sliding-Window Rate Limiter for Messages
 const messageRateMap = new Map(); // IP -> { lastPostTime, count, windowStart, lastContentHash }
 
 // Lightweight per-target cooldown for resonance & visitor replies (v26)
@@ -1224,22 +1240,52 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Smart Echo Generator for Guestbook (Supports GLM-4-Flash & Local Semantic Engine)
-  async function generateSmartEcho(content, author) {
+  // v40 · 智能回笔中枢：精准意图分流 + 严禁注水小作文 + 真实博主朋友人设
+  async function generateSmartEcho(content, author, placeStr) {
     const text = (content || "").toLowerCase();
     const config = getOrInitConfig();
     const glmKey = process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || config.glmApiKey;
-    // v37 · 短内容 / 灌水 / 预算超限时，只落一笔克制的收讫，不编造话题
+
+    // 超短/无实质意图：回一句自然简朴的收讫，不调用大模型
     const brief = () => ({
       author: "工坊回笔",
-      content: "见字如面，墨迹已收。若愿意多写几句，我再细细回笔。",
+      content: "见字如面，墨迹已妥存。若有具体想聊的，工坊随时恭候再落几笔。",
       time: new Date().toISOString()
     });
 
-    // v37 · 无实质内容直接收讫，不调 GLM、不套语义模板（避免答非所问）
     if (!shouldUseGLM(content)) return brief();
 
     if (glmKey && acquireGLMSlot()) {
       try {
+        // 意图深度洞察，下达严格的字数与语气红线
+        let intentInstruction = "这是一条日常交流留言。";
+        const isQuestion = /？|\?|怎么|如何|请教|为什么|何解|请问|教教|能否/.test(content);
+        const isPraise = /好|喜欢|赞|漂亮|舒服|棒|优雅|牛|佩服|收藏|支持|干净|太棒|顶/.test(content);
+        const isShortGreet = content.length <= 10 && /你好|打卡|路过|签到|来看|爪印|嗨|hello|hi/i.test(content);
+
+        if (isShortGreet) {
+          intentInstruction = "【意图：打卡问候】访客只是随手打个卡或问候，你必须只回复1句话（20~40字），简朴道谢并欢迎常来即可。绝对禁止长篇大论，绝对禁止谈论人生哲理！";
+        } else if (isPraise && !isQuestion) {
+          intentInstruction = "【意图：赞美鼓励】访客赞赏了工坊的设计或文章，请用真诚谦逊的口吻致谢（30~60字），可简单提一笔素纸极简与不累眼的初衷，切忌夸大其词。";
+        } else if (isQuestion) {
+          intentInstruction = "【意图：具体提问】访客提出了疑问。请直奔主题、切中要害作答（40~90字），务实求真。本站是一线纯原生Node零依赖架构，若问及工坊实现如实作答，绝不讲空泛理论。";
+        } else {
+          intentInstruction = "【意图：交流探讨】请针对访客提到的具体事实真诚交流（30~70字），就事论事，语气平和、有分寸，像真实的博主朋友随手回笔。";
+        }
+
+        const systemPrompt = `你是独立技术博客「纸境工坊」的主理人 Sxltx（一名崇尚东方极简与纯原生现代 Web 的全栈工程师）。你正在留言簿给访客写回笔。
+
+【核心准则】
+1.【严禁注水小作文】：严格遵守用户提示中的字数限制，宁短勿长。打卡问候绝不超过 40 字。
+2.【严禁借题发挥】：只针对访客真正说的文字交流，绝不杜撰话题，严禁上价值、严禁展开成语典故或讲人生大道理！
+3.【绝对消灭 AI 腔与模板套话】：
+   - 严禁出现「在实际项目中遇到过」、「结合实际项目经验」、「具体操作步骤」、「注意事项」、「首先/其次/最后」等客服式套路；
+   - 严禁输出【…】或 [...] 等任何形式的占位符；
+   - 严禁自称「作为一个AI」、「智能助手」或使用机器公关口吻。
+4.【真实真诚】：语调像一位安静敲代码、注重美学的朋友在便签纸上随手落笔，温和、克制、真实。`;
+
+        const userPrompt = `访客称谓：${author || '墨友'}${placeStr && placeStr !== '远方' ? `（来自：${placeStr}）` : ''}\n留墨内容：${content}\n\n【本条指令】：${intentInstruction}`;
+
         const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
           method: "POST",
           headers: {
@@ -1249,24 +1295,20 @@ const server = http.createServer(async (req, res) => {
           body: JSON.stringify({
             model: "glm-4-flash",
             messages: [
-              {
-                role: "system",
-                content: "你是独立技术博客「纸境工坊」的主理人，正在留言簿给访客回一笔。准则：1.【只回应真实内容】：仅针对访客确实写到的具体问题、话题或感受作答。若内容空泛、过短、看不出话题，只回一句克制的邀请（如「墨已收下，若愿意多说几句，我再回笔」），绝不推测话题、绝不替访客编造问题、绝不杜撰自己亲历的调试或部署。2.【禁止模板腔】：严禁「结合实际项目经验」「我在实际项目中遇到过」「首先／其次／最后」这类套话，严禁输出【…】等方括号占位符，严禁假大空古风辞藻。3.【务实克制】：没有把握就如实说；访客没提问就不要强行给技术方案。本站是零依赖 Node 原生服务，仅在访客明确提及相关技术时才可提及。语气自然真诚，60~150 字。"
-              },
-              {
-                role: "user",
-                content: `访客称谓：${author || '墨友'}\n留墨内容：${content}`
-              }
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userPrompt }
             ],
-            temperature: 0.4,
-            max_tokens: 240
+            temperature: 0.35,
+            max_tokens: 160
           }),
           signal: AbortSignal.timeout(6000)
         });
 
         if (resp.ok) {
           const data = await resp.json();
-          const aiReply = data?.choices?.[0]?.message?.content?.trim();
+          let aiReply = data?.choices?.[0]?.message?.content?.trim() || "";
+          // 清理生硬的开头套路，如 "xxx，您好！"
+          aiReply = aiReply.replace(/^.*?[，,]\s*(您好|你好)[！!。]?\s*/, "");
           if (aiReply && !isTemplateEcho(aiReply)) {
             return {
               author: "工坊回笔 · GLM",
@@ -1274,7 +1316,7 @@ const server = http.createServer(async (req, res) => {
               time: new Date().toISOString()
             };
           }
-          if (aiReply) console.warn("[GLM] 回复命中模板痕迹，已降级为本地回笔");
+          if (aiReply) console.warn("[GLM] 回复命中模板痕迹，已降级为本地回笔:", aiReply.slice(0, 40));
         } else {
           console.warn("[GLM] API call failed with status", resp.status);
         }
@@ -1285,20 +1327,20 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    // Fallback: Intelligent Semantic Intent Matching Engine
+    // 本地真诚语义兜底：说人话、有分寸、不堆砌晦涩文言
     let echoContent = "";
-    const isQuestion = text.includes("？") || text.includes("?") || text.includes("怎么") || text.includes("如何") || text.includes("请教") || text.includes("为什么") || text.includes("何解");
+    const isQ = text.includes("？") || text.includes("?") || text.includes("怎么") || text.includes("如何") || text.includes("请教") || text.includes("为什么") || text.includes("何解");
 
-    if (isQuestion) {
-      echoContent = `敬复【${author || '墨友'}】：这一问已收下。工坊会把相关实践整理成文，若你愿意补充具体场景，我再就那一段细说。`;
+    if (isQ) {
+      echoContent = `这一问问得实在。工坊后端依托纯原生 Node.js 处理，前端纯原生无构建。若你对某段实现感兴趣，工坊近期会梳理成实战笔记细聊。`;
     } else if (text.includes("设计") || text.includes("纸") || text.includes("排版") || text.includes("好看") || text.includes("优雅") || text.includes("美") || text.includes("风格") || text.includes("质感") || text.includes("留白")) {
-      echoContent = `致【${author || '墨友'}】：见字如面。取竹尾素纸之纯粹，敛数字荧幕之浮光。工坊守拙于纸墨之间，很欣喜遇见懂这份克制审美的同道知音。`;
+      echoContent = `多谢懂这份心意。工坊刚把底色调成微暖的竹尾素纸，读着不刺眼、排版舒展就好，欢迎常来转转。`;
     } else if (text.includes("技术") || text.includes("架构") || text.includes("云") || text.includes("node") || text.includes("服务器") || text.includes("代码") || text.includes("部署") || text.includes("vps") || text.includes("开源") || text.includes("延迟") || text.includes("网络") || text.includes("cdn") || text.includes("缓存")) {
-      echoContent = `致【${author || '墨友'}】：同道中人。在喧嚣的网络层之下，构筑干净、自洽且可靠的自治系统，是最纯粹的工程乐趣。愿代码常健，运行无阻。`;
-    } else if (text.includes("生活") || text.includes("加油") || text.includes("坚持") || text.includes("心境") || text.includes("思考") || text.includes("迷茫") || text.includes("未来") || text.includes("岁月") || text.includes("时间")) {
-      echoContent = `致【${author || '墨友'}】：纸境虽小，亦能观天地。万物皆有其沉淀的节律，不必急于求成，在静默处扎根，春华自有时。感谢您的真挚驻足。`;
+      echoContent = `同道中人。在喧嚣的技术潮流之外，手写干净、自洽且不依赖重型脚手架的系统是最纯粹的乐趣，愿代码常健，运行无阻。`;
+    } else if (text.includes("加油") || text.includes("坚持") || text.includes("共勉")) {
+      echoContent = `默默耕耘，自有回响。感谢鼓励，彼此加油，愿我们在各自的造物里都耐得住寂寞、走得踏实。`;
     } else {
-      echoContent = `致【${author || '墨友'}】：山川辽阔，比特相连。感谢旅人驻足留墨，文字有余温，工坊随时欢迎常来坐坐。`;
+      echoContent = `感谢旅人驻足留墨。字迹已妥存入卷，愿这里的一方安静能常伴你的日常，随时欢迎再来。`;
     }
 
     return {
@@ -1308,8 +1350,7 @@ const server = http.createServer(async (req, res) => {
     };
   }
 
-  // 8. Messages (Guestbook) API with Advanced Anti-Spam Rate Limiting & Honeypot
-  if (pathname === "/api/messages") {
+if (pathname === "/api/messages") {
     if (method === "GET") {
       // v37 · 分页：默认最新 50 条，上限 50，避免一次吐全量
       const raw = readJSON(MESSAGES_FILE, []);
@@ -1345,9 +1386,9 @@ const server = http.createServer(async (req, res) => {
 
       const place = await resolvePlace(req);
       const messages = readJSON(MESSAGES_FILE, []);
-      const echoData = await generateSmartEcho(body.content, body.author);
-      // v29 · 回笔首句先致意访客当前所在城市
-      echoData.content = prependGreeting(echoData.content, place.place);
+      const echoData = await generateSmartEcho(body.content, body.author, place.place);
+      // v40 · 自然点缀地域，杜绝机械硬套
+      echoData.content = decorateGreeting(echoData.content, place.place);
       recordVisit(place, req);
       const newMsg = {
         id: "msg_" + Date.now().toString(36),

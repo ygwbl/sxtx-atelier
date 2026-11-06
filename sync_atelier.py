@@ -159,7 +159,9 @@ def sync_code_and_config():
         "scripts/data-snapshot.js",
         "data/config.json",
         "data/resonances.json",
-        "data/tombstones.json"
+        "data/tombstones.json",
+        "public/intro.mp4",
+        "public/intro-poster.jpg"
     ]
     needs_restart = False
     for rel in files:
