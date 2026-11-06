@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261106_v40';
+const CURRENT_RELEASE_VER = '20261106_v41';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -787,7 +787,7 @@ function renderMessages() {
           <div class="msg-echo-box">
             <div class="echo-header">
               <div class="echo-sender">
-                <img src="/logo.png?v=20261106_v40" alt="工坊主理人" class="echo-avatar">
+                <img src="/logo.png?v=20261106_v41" alt="工坊主理人" class="echo-avatar">
                 <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
                 <span class="echo-badge-seal">主理人</span>
               </div>
@@ -820,6 +820,7 @@ function updateTimelineStats() {
 // --------------------------------------------------------------------------
 function openReader(article) {
   if (!article) return;
+  window.openReader = openReader;
   // v37 · 公开列表不再下发正文：按需取全文后再渲染阅读器
   if (!article.content) {
     fetch('/api/articles/' + encodeURIComponent(article.slug || article.id) + '?t=' + Date.now(), { cache: 'no-store' })
@@ -5180,3 +5181,126 @@ window.addEventListener('DOMContentLoaded', () => {
   if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', boot, { once: true });
   else boot();
 })();
+
+/* ======================== v41 · 留得住人：顺读 / 回访 / 足迹 ======================== */
+(function () {
+  'use strict';
+  var KEY = 'atelier_v41_read';
+  function load() { try { return JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function save(m) { try { localStorage.setItem(KEY, JSON.stringify(m)); } catch (e) {} }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function minutes(a) { return Math.max(1, Math.ceil(String(a.content || '').replace(/<[^>]+>|\s+/g, '').length / 380)); }
+  function list() { return (typeof articles !== 'undefined' && articles && articles.length) ? articles : []; }
+  function markRead(id) { var m = load(); if (!m[id]) { m[id] = Date.now(); save(m); refreshStrip(); } }
+
+  var readTimer = null, readScroller = null, readHandler = null;
+  function trackRead(a) {
+    clearTimeout(readTimer);
+    if (readScroller && readHandler) readScroller.removeEventListener('scroll', readHandler);
+    readTimer = setTimeout(function () { markRead(a.id); }, 25000);
+    var sc = document.querySelector('#reader-drawer .drawer-body, #reader-drawer .reader-scroll, #reader-drawer');
+    var cand = document.querySelectorAll('#reader-drawer *');
+    for (var i = 0; i < cand.length; i++) { if (cand[i].scrollHeight > cand[i].clientHeight + 200 && /(auto|scroll)/.test(getComputedStyle(cand[i]).overflowY)) { sc = cand[i]; break; } }
+    readScroller = sc;
+    readHandler = function () {
+      var max = sc.scrollHeight - sc.clientHeight;
+      if (max > 0 && sc.scrollTop / max > 0.6) markRead(a.id);
+    };
+    sc.addEventListener('scroll', readHandler, { passive: true });
+  }
+
+  function nextOf(a) {
+    var L = list(), read = load(), i = L.findIndex(function (x) { return x.id === a.id; });
+    if (i < 0 || L.length < 2) return null;
+    for (var k = 1; k < L.length; k++) {
+      var c = L[(i + k) % L.length];
+      if (!read[c.id]) return c;
+    }
+    return L[(i + 1) % L.length];
+  }
+
+  function injectNext(a) {
+    var old = document.querySelector('.v41-next'); if (old) old.remove();
+    var n = nextOf(a); if (!n) return;
+    var read = load(), total = list().length, done = Object.keys(read).length;
+    var anchor = document.querySelector('.related-essays') || document.querySelector('.reader-postlude');
+    if (!anchor) return;
+    var box = document.createElement('div');
+    box.className = 'v41-next';
+    box.innerHTML =
+      '<div class="v41-next-eyebrow"><span>顺着读下去</span><span class="v41-next-count">已读 ' + Math.min(done, total) + ' / ' + total + '</span></div>' +
+      '<button type="button" class="v41-next-card">' +
+        '<span class="v41-next-cat">' + esc(n.category || '随笔') + ' · 约 ' + minutes(n) + ' 分钟</span>' +
+        '<span class="v41-next-title">' + esc(n.title) + '</span>' +
+        '<span class="v41-next-sum">' + esc(n.summary || '') + '</span>' +
+        '<span class="v41-next-go">接着读 <i aria-hidden="true">→</i></span>' +
+      '</button>' +
+      '<div class="v41-next-bar"><i style="width:' + Math.round(Math.min(done, total) / Math.max(total, 1) * 100) + '%"></i></div>';
+    anchor.parentNode.insertBefore(box, anchor);
+    box.querySelector('.v41-next-card').addEventListener('click', function () {
+      var sc = readScroller; if (sc) sc.scrollTo({ top: 0 });
+      openReader(n);
+    });
+  }
+
+  /* 回访提示条 */
+  function refreshStrip() {
+    var el = document.getElementById('v41-welcome'); if (!el) return;
+    el.remove(); buildStrip(true);
+  }
+  function buildStrip(force) {
+    var L = list(); if (!L.length) return false;
+    if (!force && sessionStorage.getItem('v41_strip_off')) return true;
+    if (sessionStorage.getItem('v41_strip_off')) return true;
+    var read = load(), done = L.filter(function (a) { return read[a.id]; }).length;
+    var pos = {}; try { pos = JSON.parse(localStorage.getItem('atelier_readpos_v26') || '{}') || {}; } catch (e) {}
+    var resume = L.find(function (a) { return pos[a.id] && !read[a.id]; });
+    var unread = L.find(function (a) { return !read[a.id]; });
+    var target = resume || unread;
+    var host = document.querySelector('#essays'); if (!host) return true;
+    var el = document.createElement('div');
+    el.id = 'v41-welcome'; el.className = 'v41-welcome';
+    var msg;
+    if (!done) msg = '初次到访？不妨从这一篇开始：';
+    else if (done >= L.length) msg = '全部读完了，谢谢你的耐心。随手翻一篇旧文？';
+    else msg = '欢迎回来，已读 ' + done + ' / ' + L.length + ' 篇。' + (resume ? '上次读到一半：' : '下一篇推荐：');
+    if (done >= L.length) target = L[Math.floor(Math.random() * L.length)];
+    el.innerHTML = '<span class="v41-welcome-dot"></span><span class="v41-welcome-msg">' + esc(msg) + '</span>' +
+      (target ? '<button type="button" class="v41-welcome-go">《' + esc(target.title) + '》</button>' : '') +
+      '<button type="button" class="v41-welcome-x" aria-label="关闭">×</button>';
+    host.parentNode.insertBefore(el, host);
+    var go = el.querySelector('.v41-welcome-go');
+    if (go) go.addEventListener('click', function () { openReader(target); });
+    el.querySelector('.v41-welcome-x').addEventListener('click', function () { sessionStorage.setItem('v41_strip_off', '1'); el.remove(); });
+    return true;
+  }
+  var tries = 0, iv = setInterval(function () {
+    tries++;
+    if ((list().length && buildStrip()) || tries > 40) clearInterval(iv);
+  }, 400);
+
+  /* 挂接 openReader 与直链直达 */
+  window.v41InjectNext = injectNext;
+  var orig = window.openReader || (typeof openReader === 'function' ? openReader : null);
+  if (orig) {
+    window.openReader = openReader = function (a) {
+      var r = orig.apply(this, arguments);
+      try { if (a) { trackRead(a); setTimeout(function () { injectNext(a); }, 120); } } catch (e) {}
+      return r;
+    };
+  }
+
+  /* 滚动显现：卡片入场更柔和 */
+  if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('v41-in'); io.unobserve(e.target); } });
+    }, { threshold: 0.08 });
+    var seen = new WeakSet();
+    setInterval(function () {
+      document.querySelectorAll('.essay-card, .moment-card, .artifact-card, .timeline-item, .featured-essay-card').forEach(function (n) {
+        if (!seen.has(n)) { seen.add(n); n.classList.add('v41-reveal'); io.observe(n); }
+      });
+    }, 1200);
+  }
+})();
+/* ======================== v41 · 完 ======================== */

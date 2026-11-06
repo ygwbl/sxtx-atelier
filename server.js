@@ -513,70 +513,129 @@ function recordVisit(place, req) {
   return { data, isNew, skipped: false };
 }
 
-// v40 · 纸境全站访问统计与文章阅读量中枢 (PV/UV/Today/Articles)
-const statsSeenMap = new Map(); // hash(ip + day) -> timestamp
+// v41 · 纸境全站访问统计（真实口径）
+//   PV：仅统计真人页面加载（爬虫 / 探活 / 站长自己不计）；
+//   UV：同一访客每自然日仅 1 次，去重表落盘（哈希+密盐，无明文 IP），重启不重复计数；
+//   文章阅读：同一访客 30 分钟内重复打开同一篇只计 1 次，统一以 slug 为键。
+const STATS_SEEN_FILE = path.join(DATA_DIR, ".stats-seen.json"); // 本机私有，不参与双机同步
+const BOT_UA_RE = /bot|spider|crawl|slurp|curl|wget|python|postman|pingdom|uptime|monitor|headless|scrapy|go-http|java\/|okhttp|httpclient|libwww|node-fetch|axios|lighthouse|preview|facebookexternalhit|embedly/i;
+let statsSeen = null; // { day, salt, uv: {hash:1}, art: {hash:ts} }
+
+function loadStatsSeen() {
+  const day = new Date().toISOString().slice(0, 10);
+  if (!statsSeen) {
+    const d = readJSON(STATS_SEEN_FILE, {});
+    statsSeen = {
+      day: d.day || day,
+      salt: d.salt || crypto.randomBytes(16).toString("hex"),
+      uv: d.uv || {},
+      art: d.art || {}
+    };
+  }
+  if (statsSeen.day !== day) { statsSeen.day = day; statsSeen.uv = {}; statsSeen.art = {}; }
+  return statsSeen;
+}
+let statsSeenDirty = false, statsSeenTimer = null;
+function flushStatsSeen() {
+  if (!statsSeenDirty) return;
+  statsSeenDirty = false;
+  try { writeJSON(STATS_SEEN_FILE, statsSeen); } catch (e) {}
+}
+function markStatsSeenDirty() {
+  statsSeenDirty = true;
+  if (!statsSeenTimer) statsSeenTimer = setTimeout(() => { statsSeenTimer = null; flushStatsSeen(); }, 3000);
+}
+process.on("SIGTERM", () => { flushStatsSeen(); process.exit(0); });
+
+// 文章键统一为 slug（兼容历史 art-N 形式）
+function canonicalArticleKey(raw) {
+  const k = String(raw || "").trim().slice(0, 80);
+  if (!k) return "";
+  try {
+    const list = readJSON(ARTICLES_FILE, []);
+    const hit = list.find(a => a && (a.slug === k || String(a.id) === k));
+    if (hit) return hit.slug || String(hit.id);
+  } catch (e) {}
+  return k;
+}
 
 function readStats() {
   const nowDay = new Date().toISOString().slice(0, 10);
-  const defaultStats = {
-    pv: 32,
-    uv: 18,
-    today: { date: nowDay, pv: 6, uv: 4 },
-    articles: {},
-    history: {}
-  };
-  const d = readJSON(STATS_FILE, defaultStats);
-  if (!d.today || d.today.date !== nowDay) {
-    if (d.today && d.today.date) {
-      if (!d.history) d.history = {};
-      d.history[d.today.date] = { pv: d.today.pv || 0, uv: d.today.uv || 0 };
-    }
+  const d = readJSON(STATS_FILE, { pv: 0, uv: 0, today: { date: nowDay, pv: 0, uv: 0 }, articles: {}, history: {} });
+  if (!d.history) d.history = {};
+  if (!d.articles) d.articles = {};
+  if (!d.today || !d.today.date) d.today = { date: nowDay, pv: 0, uv: 0 };
+  if (d.today.date !== nowDay) {
+    d.history[d.today.date] = { pv: d.today.pv || 0, uv: d.today.uv || 0 };
     d.today = { date: nowDay, pv: 0, uv: 0 };
   }
-  if (typeof d.pv !== "number") d.pv = 32;
-  if (typeof d.uv !== "number") d.uv = 18;
-  if (!d.articles) d.articles = {};
+  d.pv = Number(d.pv) || 0;
+  d.uv = Number(d.uv) || 0;
+  // 一次性迁移：去掉 v40 硬编码的占位基数，并把 art-N / slug 双份计数合并为 slug
+  if (!d.v41) {
+    // 总数 = 各日之和；占位基数（6/4）只存在于最早一天
+    const days = Object.keys(d.history).sort();
+    const seedDay = days.length ? days[0] : d.today.date;
+    const seedRec = seedDay === d.today.date ? d.today : d.history[seedDay];
+    if (seedRec) {
+      seedRec.pv = Math.max(0, (seedRec.pv || 0) - 6);
+      seedRec.uv = Math.max(0, (seedRec.uv || 0) - 4);
+    }
+    let sp = d.today.pv || 0, su = d.today.uv || 0;
+    days.forEach(k => { sp += d.history[k].pv || 0; su += d.history[k].uv || 0; });
+    d.pv = sp; d.uv = su;
+    const merged = {};
+    Object.keys(d.articles).forEach(k => {
+      const ck = canonicalArticleKey(k);
+      merged[ck] = Math.max(merged[ck] || 0, Number(d.articles[k]) || 0);
+    });
+    d.articles = merged;
+    d.v41 = true;
+  }
   return d;
 }
 
 function recordSiteVisit(req, articleId = null) {
   const stats = readStats();
+  const seen = loadStatsSeen();
   const nowMs = Date.now();
-  const day = stats.today.date;
   const ip = getClientIP(req);
-  const ua = String(req.headers["user-agent"] || "").toLowerCase();
-  const isBot = /bot|spider|crawl|slurp|curl|wget|python|postman|pingdom/i.test(ua);
+  const ua = String(req.headers["user-agent"] || "");
+  const isBot = !ua || BOT_UA_RE.test(ua) || isLocalIP(ip);
+  const h = (x) => crypto.createHash("sha256").update(seen.salt + "|" + x).digest("hex").slice(0, 24);
 
-  // 全站浏览量自增
-  stats.pv = (Number(stats.pv) || 0) + 1;
-  stats.today.pv = (Number(stats.today.pv) || 0) + 1;
+  let articleViews = null;
+  const artKey = articleId ? canonicalArticleKey(articleId) : "";
 
-  // 文章独立阅读量自增
-  if (articleId && typeof articleId === "string") {
-    const cleanArtId = articleId.trim().slice(0, 80);
-    if (cleanArtId) {
-      stats.articles[cleanArtId] = (Number(stats.articles[cleanArtId]) || 0) + 1;
-    }
-  }
-
-  // 访客 UV 散列去重（不记录明文 IP，保护隐私，当日同 IP 仅计 1 次 UV）
   if (!isBot) {
-    const uvKey = crypto.createHash("sha256").update(String(ip) + "_" + day).digest("hex");
-    if (!statsSeenMap.has(uvKey)) {
-      statsSeenMap.set(uvKey, nowMs);
-      stats.uv = (Number(stats.uv) || 0) + 1;
-      stats.today.uv = (Number(stats.today.uv) || 0) + 1;
-      if (statsSeenMap.size > 5000) statsSeenMap.clear();
+    if (artKey) {
+      // 文章阅读：不计入页面 PV（PV 已在进站时计过），同访客 30 分钟内同篇只计 1 次
+      const ak = h(ip + "|" + artKey);
+      if (nowMs - (seen.art[ak] || 0) > 30 * 60000) {
+        seen.art[ak] = nowMs;
+        stats.articles[artKey] = (Number(stats.articles[artKey]) || 0) + 1;
+        markStatsSeenDirty();
+      }
+    } else {
+      stats.pv += 1;
+      stats.today.pv = (Number(stats.today.pv) || 0) + 1;
+      const uk = h(ip);
+      if (!seen.uv[uk]) {
+        seen.uv[uk] = 1;
+        stats.uv += 1;
+        stats.today.uv = (Number(stats.today.uv) || 0) + 1;
+        markStatsSeenDirty();
+      }
     }
+    writeJSON(STATS_FILE, stats);
   }
-
-  writeJSON(STATS_FILE, stats);
+  if (artKey) articleViews = stats.articles[artKey] || 0;
   return {
     pv: stats.pv,
     uv: stats.uv,
     todayPv: stats.today.pv,
     todayUv: stats.today.uv,
-    articleViews: articleId ? (stats.articles[articleId] || 0) : null
+    articleViews: articleViews
   };
 }
 
