@@ -519,9 +519,9 @@ const statsSeenMap = new Map(); // hash(ip + day) -> timestamp
 function readStats() {
   const nowDay = new Date().toISOString().slice(0, 10);
   const defaultStats = {
-    pv: 1428,
-    uv: 516,
-    today: { date: nowDay, pv: 72, uv: 28 },
+    pv: 32,
+    uv: 18,
+    today: { date: nowDay, pv: 6, uv: 4 },
     articles: {},
     history: {}
   };
@@ -533,8 +533,8 @@ function readStats() {
     }
     d.today = { date: nowDay, pv: 0, uv: 0 };
   }
-  if (typeof d.pv !== "number") d.pv = 1428;
-  if (typeof d.uv !== "number") d.uv = 516;
+  if (typeof d.pv !== "number") d.pv = 32;
+  if (typeof d.uv !== "number") d.uv = 18;
   if (!d.articles) d.articles = {};
   return d;
 }
