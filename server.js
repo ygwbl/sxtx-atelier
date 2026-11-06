@@ -869,7 +869,9 @@ const MIME_TYPES = {
   ".ico": "image/x-icon",
   ".woff2": "font/woff2",
   ".txt": "text/plain; charset=utf-8",
-  ".xml": "application/xml; charset=utf-8"
+  ".xml": "application/xml; charset=utf-8",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm"
 };
 
 const CORS_HOSTS = /^(localhost|127\.0\.0\.1|hlat\.top|.*\.hlat\.top|hlat\.xyz|.*\.hlat\.xyz)$/i;
@@ -1507,6 +1509,27 @@ const server = http.createServer(async (req, res) => {
   const mime = MIME_TYPES[ext] || "application/octet-stream";
   const isDynamicMeta = pathname === "/sitemap.xml" || pathname === "/robots.txt" || pathname === "/rss.xml";
   const isCacheable = ext !== ".html" && pathname !== "/sw.js" && !isDynamicMeta;
+  // v39 · 影片走流式 + Range（Safari / iOS 播放 <video> 必须支持 206 分段）
+  if (ext === ".mp4" || ext === ".webm") {
+    const size = fs.statSync(filePath).size;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ""));
+    const baseHeaders = { "Content-Type": mime, "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=2592000", "X-Atelier-Origin": "app" };
+    if (range) {
+      let start = range[1] === "" ? size - Number(range[2]) : Number(range[1]);
+      let end = range[1] !== "" && range[2] !== "" ? Number(range[2]) : size - 1;
+      if (!(start >= 0) || start >= size || end < start) {
+        res.writeHead(416, { "Content-Range": `bytes */${size}` });
+        return res.end();
+      }
+      end = Math.min(end, size - 1);
+      res.writeHead(206, Object.assign(baseHeaders, { "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": end - start + 1 }));
+      if (req.method === "HEAD") return res.end();
+      return fs.createReadStream(filePath, { start, end }).pipe(res);
+    }
+    res.writeHead(200, Object.assign(baseHeaders, { "Content-Length": size }));
+    if (req.method === "HEAD") return res.end();
+    return fs.createReadStream(filePath).pipe(res);
+  }
   fs.readFile(filePath, (err, content) => {
     if (err) {
       res.writeHead(500, { "X-Atelier-Origin": "app" });

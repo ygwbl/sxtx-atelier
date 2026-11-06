@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261106_v38';
+const CURRENT_RELEASE_VER = '20261106_v39';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -746,7 +746,7 @@ function renderMessages() {
           <div class="msg-echo-box">
             <div class="echo-header">
               <div class="echo-sender">
-                <img src="/logo.png?v=20261106_v38" alt="工坊主理人" class="echo-avatar">
+                <img src="/logo.png?v=20261106_v39" alt="工坊主理人" class="echo-avatar">
                 <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
                 <span class="echo-badge-seal">主理人</span>
               </div>
@@ -4686,3 +4686,445 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+/* ==========================================================================
+   v39 · 纸境立体 (Paper Atelier 3D Stage) + 触感互动层
+   零依赖：Canvas 2D 手写透视投影，不用 WebGL / three.js
+   A 顶部 3D 舞台：朱砂印立方 + 五张章节纸页环绕，可拖动、点纸页跳章节
+   B 片头影片：按需加载 /intro.mp4，不点不下载
+   C 卡片微倾 + 纸面反光   D 导航墨痕滑块   E 返回顶部阅读进度环   F 印章可盖
+   ========================================================================== */
+(function atelierV39() {
+  'use strict';
+  const reduceMotion = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const finePointer = !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches);
+
+  /* ── A. 3D 舞台 ───────────────────────────────────────────────────── */
+  const SHEETS = [
+    { id: 'essays',    num: '01', title: '文墨', desc: '长文与技术沉淀' },
+    { id: 'moments',   num: '02', title: '闪念', desc: '随手记下的念头' },
+    { id: 'artifacts', num: '03', title: '造物', desc: '运行中的小作品' },
+    { id: 'timeline',  num: '04', title: '足迹', desc: '一路走来的刻度' },
+    { id: 'guestbook', num: '05', title: '留墨', desc: '给工坊留一句话' }
+  ];
+  const SEAL_FACES = ['纸', '境', '工', '坊'];
+
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  function parseColor(str) {
+    const c = document.createElement('canvas').getContext('2d');
+    c.fillStyle = '#000'; c.fillStyle = str;
+    const s = c.fillStyle;
+    if (s[0] === '#') return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+    const m = s.match(/[\d.]+/g) || [0, 0, 0];
+    return [+m[0], +m[1], +m[2]];
+  }
+  const rgb = (c, k, a) => `rgba(${Math.round(c[0] * k)},${Math.round(c[1] * k)},${Math.round(c[2] * k)},${a == null ? 1 : a})`;
+
+  function initStage() {
+    const stage = document.getElementById('v39-stage');
+    const canvas = document.getElementById('v39-canvas');
+    if (!stage || !canvas || !canvas.getContext) return;
+    const ctx = canvas.getContext('2d');
+    const tip = document.getElementById('v39-tip');
+    let W = 0, H = 0, dpr = 1;
+    let pal = {};
+    function readPalette() {
+      pal = {
+        paper: parseColor(cssVar('--bg-card', '#fdfcf9')),
+        ink: parseColor(cssVar('--text-title', '#1f1c18')),
+        muted: parseColor(cssVar('--text-muted', '#6b645a')),
+        seal: parseColor(cssVar('--brand-seal', '#a8322b')),
+        dark: document.documentElement.getAttribute('data-theme') === 'dark'
+      };
+    }
+    readPalette();
+    new MutationObserver(readPalette).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    function resize() {
+      const r = stage.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      W = Math.max(1, Math.round(r.width * dpr));
+      H = Math.max(1, Math.round(r.height * dpr));
+      canvas.width = W; canvas.height = H;
+    }
+    resize();
+    if ('ResizeObserver' in window) new ResizeObserver(resize).observe(stage);
+    else window.addEventListener('resize', resize);
+
+    // 墨点粒子：球壳上随机分布
+    const dots = [];
+    for (let i = 0; i < 90; i++) {
+      const u = Math.random() * 2 - 1, th = Math.random() * Math.PI * 2, r = 3.2 + Math.random() * 1.6;
+      const s = Math.sqrt(1 - u * u);
+      dots.push({ x: r * s * Math.cos(th), y: u * r * 0.55, z: r * s * Math.sin(th), s: 0.6 + Math.random() * 1.4, ph: Math.random() * 6.28 });
+    }
+
+    let yaw = 0.35, pitch = -0.22, vYaw = 0, dragging = false, lastX = 0, lastY = 0, moved = 0;
+    let hover = -1, t0 = performance.now(), t = 0, visible = true, raf = 0;
+    const lift = SHEETS.map(() => 0);
+    let sheetPolys = [];
+
+    function project(p) {
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      let x = p[0] * cy - p[2] * sy, z = p[0] * sy + p[2] * cy;
+      let y = p[1] * cp - z * sp; z = p[1] * sp + z * cp;
+      const dist = 9.5, f = Math.min(W, H * 1.6) * 0.62;
+      const zz = z + dist;
+      return { x: W / 2 + (x * f) / zz, y: H * 0.52 + (y * f) / zz, z: zz };
+    }
+    function rotY(p, a) { const c = Math.cos(a), s = Math.sin(a); return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c]; }
+    function rotX(p, a) { const c = Math.cos(a), s = Math.sin(a); return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c]; }
+    function viewNormal(n) { // 只需旋转，不需平移
+      const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+      let x = n[0] * cy - n[2] * sy, z = n[0] * sy + n[2] * cy;
+      const y = n[1] * cp - z * sp; z = n[1] * sp + z * cp;
+      return [x, y, z];
+    }
+    function poly(pts) {
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+    }
+    function mapTo(p0, p1, p3, w, h) {
+      ctx.setTransform((p1.x - p0.x) / w, (p1.y - p0.y) / w, (p3.x - p0.x) / h, (p3.y - p0.y) / h, p0.x, p0.y);
+    }
+    const LIGHT = (() => { const l = [-0.4, -0.7, -0.6]; const m = Math.hypot(...l); return l.map(v => v / m); })();
+    const shade = (n) => 0.72 + 0.28 * Math.max(0, -(n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]));
+
+    function frame(now) {
+      raf = 0;
+      if (!reduceMotion) t = (now - t0) / 1000;
+      if (!dragging) { yaw += vYaw; vYaw *= 0.94; if (!reduceMotion && Math.abs(vYaw) < 0.0008) yaw += 0.0016; }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+
+      // 地面柔影
+      const g = project([0, 1.9, 0]);
+      const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, W * 0.28);
+      grad.addColorStop(0, rgb(pal.dark ? [0, 0, 0] : pal.ink, 1, pal.dark ? 0.35 : 0.08));
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.save(); ctx.translate(g.x, g.y); ctx.scale(1, 0.22); ctx.translate(-g.x, -g.y);
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H); ctx.restore();
+
+      const faces = [];
+      // 朱砂印立方
+      const spin = t * 0.35, bob = Math.sin(t * 1.1) * 0.08, S = 0.72;
+      const cubeV = [];
+      for (let i = 0; i < 8; i++) {
+        let p = [(i & 1 ? 1 : -1) * S, (i & 2 ? 1 : -1) * S, (i & 4 ? 1 : -1) * S];
+        p = rotX(rotY(p, spin), 0.18); p[1] += bob - 0.15;
+        cubeV.push(p);
+      }
+      // 每面顶点顺序保证 u×v 指向内侧，这样从外侧看文字不镜像
+      const CF = [[0, 1, 3, 2, 0], [1, 5, 7, 3, 1], [5, 4, 6, 7, 2], [4, 0, 2, 6, 3], [0, 4, 5, 1, -1], [2, 3, 7, 6, -1]];
+      CF.forEach(f => {
+        const a = cubeV[f[0]], b = cubeV[f[1]], d = cubeV[f[3]];
+        const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [d[0] - a[0], d[1] - a[1], d[2] - a[2]];
+        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        const m = Math.hypot(...n); n = n.map(x => -x / m); // 取外法线
+        const vn = viewNormal(n);
+        if (vn[2] > 0) return; // 背面剔除
+        const pts = [a, b, cubeV[f[2]], d].map(project);
+        faces.push({ z: pts.reduce((s, p) => s + p.z, 0) / 4, kind: 'cube', pts, n, label: f[4] });
+      });
+
+      // 五张纸页
+      SHEETS.forEach((s, i) => {
+        const ang = (i / SHEETS.length) * Math.PI * 2 + t * 0.12;
+        const R = 2.75 + lift[i] * 0.35, hw = 0.62, hh = 0.82;
+        const cy = Math.sin(t * 0.9 + i * 1.3) * 0.18 - 0.1;
+        const cx = Math.sin(ang) * R, cz = Math.cos(ang) * R;
+        const tx = -Math.cos(ang), tz = Math.sin(ang); // 切向（使正面文字朝外可读）
+        const tilt = 0.12;
+        const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([u, v]) =>
+          [cx + tx * u, cy + v + tilt * u * 0.2, cz + tz * u]);
+        const n = [Math.sin(ang), 0, Math.cos(ang)];
+        const vn = viewNormal(n);
+        const pts = corners.map(project);
+        faces.push({ z: pts.reduce((a, p) => a + p.z, 0) / 4, kind: 'sheet', pts, n, front: vn[2] > 0 ? false : true, i });
+      });
+
+      faces.sort((a, b) => b.z - a.z);
+
+      // 远处墨点
+      const dp = dots.map(d => { const p = project(rotY([d.x, d.y + Math.sin(t + d.ph) * 0.12, d.z], t * 0.05)); p.s = d.s; return p; });
+      const drawDots = (far) => dp.forEach(p => {
+        if ((p.z > 9.5) !== far) return;
+        const a = Math.max(0.05, Math.min(0.5, 1.6 - p.z / 9));
+        ctx.fillStyle = rgb(pal.ink, 1, a * (pal.dark ? 0.6 : 0.35));
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.s * dpr * (10 / p.z), 0, 6.283); ctx.fill();
+      });
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      drawDots(true);
+
+      sheetPolys = [];
+      faces.forEach(f => {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        const k = shade(f.n);
+        if (f.kind === 'cube') {
+          poly(f.pts);
+          ctx.fillStyle = rgb(pal.seal, k * (f.label < 0 ? 0.82 : 1));
+          ctx.fill();
+          ctx.strokeStyle = rgb(pal.seal, 0.6, 0.6); ctx.lineWidth = 1 * dpr; ctx.stroke();
+          if (f.label >= 0) {
+            mapTo(f.pts[0], f.pts[1], f.pts[3], 100, 100);
+            ctx.strokeStyle = 'rgba(255,248,235,0.55)'; ctx.lineWidth = 3;
+            ctx.strokeRect(9, 9, 82, 82);
+            ctx.fillStyle = 'rgba(255,248,235,0.95)';
+            ctx.font = '600 58px "Songti SC","Noto Serif CJK SC","Source Han Serif SC",serif';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText(SEAL_FACES[f.label], 50, 54);
+          }
+        } else {
+          const hl = f.i === hover;
+          poly(f.pts);
+          ctx.shadowColor = 'rgba(0,0,0,' + (pal.dark ? 0.5 : 0.12) + ')';
+          ctx.shadowBlur = (hl ? 26 : 14) * dpr; ctx.shadowOffsetY = 6 * dpr;
+          ctx.fillStyle = rgb(pal.paper, f.front ? k : k * 0.9);
+          ctx.fill();
+          ctx.shadowColor = 'transparent';
+          ctx.strokeStyle = hl ? rgb(pal.seal, 1, 0.8) : rgb(pal.ink, 1, 0.12);
+          ctx.lineWidth = (hl ? 1.6 : 1) * dpr; ctx.stroke();
+          const s = SHEETS[f.i];
+          if (f.front) {
+            mapTo(f.pts[0], f.pts[1], f.pts[3], 124, 164);
+            ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+            ctx.fillStyle = rgb(pal.seal, 1, 0.9);
+            ctx.font = '600 13px ui-monospace,Menlo,Consolas,monospace';
+            ctx.fillText(s.num, 14, 26);
+            ctx.fillStyle = rgb(pal.ink, 1, 0.9);
+            ctx.font = '600 30px "Songti SC","Noto Serif CJK SC","Source Han Serif SC",serif';
+            ctx.fillText(s.title, 14, 72);
+            ctx.fillStyle = rgb(pal.muted, 1, 0.9);
+            ctx.font = '11px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+            ctx.fillText(s.desc, 14, 96);
+            ctx.strokeStyle = rgb(pal.ink, 1, 0.1); ctx.lineWidth = 1;
+            for (let l = 0; l < 3; l++) { ctx.beginPath(); ctx.moveTo(14, 118 + l * 11); ctx.lineTo(110 - l * 18, 118 + l * 11); ctx.stroke(); }
+            ctx.fillStyle = rgb(pal.seal, 1, hl ? 0.95 : 0.55);
+            ctx.fillRect(96, 136, 16, 16);
+            sheetPolys.push({ i: f.i, pts: f.pts });
+          }
+        }
+      });
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      drawDots(false);
+
+      SHEETS.forEach((_, i) => { lift[i] += ((i === hover ? 1 : 0) - lift[i]) * 0.15; });
+      if (visible && !reduceMotion) raf = requestAnimationFrame(frame);
+    }
+    function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+
+    function inside(px, py, pts) {
+      let c = false;
+      for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        if (((pts[i].y > py) !== (pts[j].y > py)) && (px < (pts[j].x - pts[i].x) * (py - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x)) c = !c;
+      }
+      return c;
+    }
+    function pick(e) {
+      const r = canvas.getBoundingClientRect();
+      const x = (e.clientX - r.left) * dpr, y = (e.clientY - r.top) * dpr;
+      for (let k = sheetPolys.length - 1; k >= 0; k--) if (inside(x, y, sheetPolys[k].pts)) return sheetPolys[k].i;
+      return -1;
+    }
+    function go(i) {
+      const el = document.getElementById(SHEETS[i].id);
+      if (el) el.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      dragging = true; moved = 0; lastX = e.clientX; lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId); stage.classList.add('is-dragging');
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      if (dragging) {
+        const dx = e.clientX - lastX, dy = e.clientY - lastY;
+        moved += Math.abs(dx) + Math.abs(dy);
+        yaw += dx * 0.008; vYaw = dx * 0.008;
+        pitch = Math.max(-0.7, Math.min(0.25, pitch + dy * 0.004));
+        lastX = e.clientX; lastY = e.clientY;
+        kick();
+        return;
+      }
+      const h = pick(e);
+      if (h !== hover) {
+        hover = h;
+        canvas.style.cursor = h >= 0 ? 'pointer' : 'grab';
+        if (tip) {
+          tip.textContent = h >= 0 ? `前往 ${SHEETS[h].num} · ${SHEETS[h].title}` : '';
+          tip.classList.toggle('is-on', h >= 0);
+        }
+        kick();
+      }
+      if (tip && h >= 0) {
+        const r = stage.getBoundingClientRect();
+        tip.style.transform = `translate(${e.clientX - r.left + 14}px, ${e.clientY - r.top + 14}px)`;
+      }
+    });
+    const end = (e) => {
+      if (!dragging) return;
+      dragging = false; stage.classList.remove('is-dragging');
+      if (moved < 6) { const h = pick(e); if (h >= 0) go(h); }
+      kick();
+    };
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+    canvas.addEventListener('pointerleave', () => { if (!dragging && hover !== -1) { hover = -1; tip && tip.classList.remove('is-on'); kick(); } });
+
+    // 键盘可达：左右键转动，回车进入正对的那张纸页
+    canvas.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') { vYaw = -0.05; kick(); e.preventDefault(); }
+      else if (e.key === 'ArrowRight') { vYaw = 0.05; kick(); e.preventDefault(); }
+      else if (e.key === 'Enter') {
+        let best = -1, bz = Infinity;
+        sheetPolys.forEach(p => { const z = p.pts.reduce((s, q) => s + q.z, 0); if (z < bz) { bz = z; best = p.i; } });
+        if (best >= 0) go(best);
+      }
+    });
+
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver((en) => { visible = en[0].isIntersecting; if (visible) kick(); }).observe(stage);
+    }
+    document.addEventListener('visibilitychange', () => { visible = !document.hidden; if (visible) kick(); });
+    // 主题切换后重绘一帧（动效关闭时尤需）
+    new MutationObserver(() => setTimeout(kick, 30)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(kick);
+    kick();
+    stage.classList.add('is-ready');
+  }
+
+  /* ── B. 片头影片：点击才加载 ──────────────────────────────────────── */
+  function initFilm() {
+    const btn = document.getElementById('v39-film-btn');
+    const box = document.getElementById('v39-film');
+    if (!btn || !box) return;
+    const close = () => {
+      const v = box.querySelector('video');
+      if (v) { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); }
+      box.hidden = true; btn.setAttribute('aria-expanded', 'false');
+      btn.focus();
+    };
+    btn.addEventListener('click', () => {
+      if (!box.hidden) return close();
+      const v = document.createElement('video');
+      v.src = '/intro.mp4?v=' + CURRENT_RELEASE_VER;
+      v.poster = '/intro-poster.jpg?v=' + CURRENT_RELEASE_VER;
+      v.controls = true; v.autoplay = true; v.playsInline = true; v.preload = 'auto';
+      v.setAttribute('playsinline', '');
+      v.addEventListener('ended', close);
+      box.querySelector('.v39-film-frame').appendChild(v);
+      box.hidden = false; btn.setAttribute('aria-expanded', 'true');
+      const p = v.play(); if (p && p.catch) p.catch(() => {});
+    });
+    box.querySelector('.v39-film-close')?.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !box.hidden) close(); });
+  }
+
+  /* ── C. 卡片微倾 + 纸面反光（仅精确指针，尊重减弱动效） ─────────── */
+  function initTilt() {
+    if (!finePointer || reduceMotion) return;
+    const SEL = '.artifact-card, .tl-card, .metric-card, .featured-essay-card';
+    let cur = null, rafId = 0, mx = 0, my = 0;
+    function apply() {
+      rafId = 0;
+      if (!cur) return;
+      const r = cur.getBoundingClientRect();
+      const px = (mx - r.left) / r.width, py = (my - r.top) / r.height;
+      cur.style.setProperty('--v39-rx', ((0.5 - py) * 5).toFixed(2) + 'deg');
+      cur.style.setProperty('--v39-ry', ((px - 0.5) * 6).toFixed(2) + 'deg');
+      cur.style.setProperty('--v39-gx', (px * 100).toFixed(1) + '%');
+      cur.style.setProperty('--v39-gy', (py * 100).toFixed(1) + '%');
+    }
+    document.addEventListener('pointermove', (e) => {
+      const el = e.target.closest ? e.target.closest(SEL) : null;
+      if (el !== cur) {
+        if (cur) cur.classList.remove('v39-tilting');
+        cur = el;
+        if (cur) cur.classList.add('v39-tilting');
+      }
+      mx = e.clientX; my = e.clientY;
+      if (cur && !rafId) rafId = requestAnimationFrame(apply);
+    }, { passive: true });
+    document.addEventListener('pointerleave', () => { if (cur) cur.classList.remove('v39-tilting'); cur = null; });
+  }
+
+  /* ── D. 导航墨痕：一道朱砂细线随悬停/当前章节滑动 ─────────────────── */
+  function initNavInk() {
+    const wrap = document.querySelector('.nav-links');
+    if (!wrap) return;
+    const bar = document.createElement('span');
+    bar.className = 'v39-nav-ink'; bar.setAttribute('aria-hidden', 'true');
+    wrap.appendChild(bar);
+    const moveTo = (el) => {
+      if (!el) { bar.style.opacity = '0'; return; }
+      bar.style.opacity = '1';
+      bar.style.width = el.offsetWidth * 0.5 + 'px';
+      bar.style.transform = `translateX(${el.offsetLeft + el.offsetWidth * 0.25}px)`;
+    };
+    const active = () => wrap.querySelector('.nav-item.active');
+    wrap.addEventListener('pointerover', (e) => { const a = e.target.closest('.nav-item'); if (a) moveTo(a); });
+    wrap.addEventListener('pointerleave', () => moveTo(active()));
+    new MutationObserver(() => { if (!wrap.matches(':hover')) moveTo(active()); })
+      .observe(wrap, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('resize', () => moveTo(active()));
+    moveTo(active());
+  }
+
+  /* ── E. 返回顶部按钮外圈显示全页阅读进度 ─────────────────────────── */
+  function initTopRing() {
+    const btn = document.getElementById('btn-back-to-top');
+    if (!btn || btn.querySelector('.v39-ring')) return;
+    btn.insertAdjacentHTML('beforeend',
+      '<svg class="v39-ring" viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" pathLength="100"></circle></svg>');
+    const c = btn.querySelector('.v39-ring circle');
+    let tick = false;
+    const upd = () => {
+      tick = false;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const p = max > 0 ? Math.min(1, window.scrollY / max) : 0;
+      c.style.strokeDashoffset = String(100 - p * 100);
+    };
+    window.addEventListener('scroll', () => { if (!tick) { tick = true; requestAnimationFrame(upd); } }, { passive: true });
+    upd();
+  }
+
+  /* ── F. 印章：点一下盖一下，连盖五次有小彩蛋 ─────────────────────── */
+  function initSeal() {
+    const seal = document.querySelector('.hero-meta-row .seal-stamp');
+    if (!seal) return;
+    seal.setAttribute('role', 'button');
+    seal.setAttribute('tabindex', '0');
+    seal.setAttribute('aria-label', '盖一枚纸境印');
+    let n = 0, timer = 0;
+    const press = () => {
+      seal.classList.remove('v39-pressed'); void seal.offsetWidth; seal.classList.add('v39-pressed');
+      n++; clearTimeout(timer); timer = setTimeout(() => { n = 0; }, 1600);
+      const r = seal.getBoundingClientRect();
+      const mark = document.createElement('span');
+      mark.className = 'v39-stamp-mark';
+      mark.textContent = n >= 5 ? '大吉' : '印';
+      mark.style.left = (r.left + r.width / 2 + (Math.random() * 60 - 30)) + 'px';
+      mark.style.top = (r.top + r.height / 2 - 40 + (Math.random() * 20 - 10)) + 'px';
+      mark.style.setProperty('--v39-rot', (Math.random() * 24 - 12).toFixed(1) + 'deg');
+      document.body.appendChild(mark);
+      setTimeout(() => mark.remove(), 1400);
+      if (n === 5) { n = 0; seal.classList.add('v39-lucky'); setTimeout(() => seal.classList.remove('v39-lucky'), 1600); }
+    };
+    seal.addEventListener('click', press);
+    seal.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); press(); } });
+  }
+
+  function boot() {
+    try { initStage(); } catch (e) { console.warn('[v39 stage]', e); }
+    try { initFilm(); } catch (e) {}
+    try { initTilt(); } catch (e) {}
+    try { initNavInk(); } catch (e) {}
+    try { initTopRing(); } catch (e) {}
+    try { initSeal(); } catch (e) {}
+  }
+  if (document.readyState === 'loading') window.addEventListener('DOMContentLoaded', boot, { once: true });
+  else boot();
+})();
