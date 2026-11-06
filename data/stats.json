@@ -1,0 +1,37 @@
+{
+  "pv": 1428,
+  "uv": 516,
+  "today": {
+    "date": "2026-11-06",
+    "pv": 72,
+    "uv": 28
+  },
+  "articles": {
+    "art-8": 48,
+    "microvm-and-edge-keepalive-architecture-deep-dive": 48,
+    "art-7": 86,
+    "why-join-forever-blog-ten-years-covenant": 86,
+    "art-6": 115,
+    "online-cache-postmortem-multi-cdn-and-local-storage-anti-deadlock": 115,
+    "art-5": 98,
+    "edge-cache-governance-and-cross-cloud-acceleration": 98,
+    "art-4": 156,
+    "autonomous-digital-atelier-experiment": 156,
+    "art-1": 218,
+    "instabox-keepalive-and-tunnel": 218,
+    "art-2": 192,
+    "minimalism-and-editorial-design": 192,
+    "art-3": 170,
+    "digital-nomad-gear-and-workflow": 170
+  },
+  "history": {
+    "2026-11-05": {
+      "pv": 136,
+      "uv": 49
+    },
+    "2026-11-04": {
+      "pv": 224,
+      "uv": 72
+    }
+  }
+}

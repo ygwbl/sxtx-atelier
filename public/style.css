@@ -8348,3 +8348,97 @@ html {
 }
 
 /* ======================== v39 · 完 ======================== */
+
+
+/* ==========================================================================
+   v40 · 纸境全站访问统计与卷册围阅层 (Paper Stats & Reader Views)
+   ========================================================================== */
+.footer-stats-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  padding: 0.28rem 0.75rem;
+  background: var(--card-bg, #fcfbf9);
+  border: 1px solid var(--border-light, #e7e5e4);
+  border-radius: 999px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.78rem;
+  color: var(--text-muted, #78716c);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+.footer-stats-wrap:hover {
+  border-color: rgba(185, 28, 28, 0.35);
+  box-shadow: 0 2px 6px rgba(185, 28, 28, 0.06);
+}
+
+.stats-badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+  display: inline-block;
+  animation: stats-pulse 2.4s infinite ease-in-out;
+}
+
+@keyframes stats-pulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.15); box-shadow: 0 0 8px rgba(16, 185, 129, 0.8); }
+}
+
+.fstat-tag {
+  color: var(--cinnabar, #b91c1c);
+  font-weight: 600;
+  font-size: 0.76rem;
+  margin-right: 0.15rem;
+}
+
+.fstat-num {
+  color: var(--text-main, #1c1917);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.fstat-num.fstat-today {
+  color: var(--cinnabar, #b91c1c);
+}
+
+.fstat-sep {
+  opacity: 0.35;
+  margin: 0 0.1rem;
+}
+
+/* 阅读抽屉阅读数徽章 */
+.drawer-views {
+  margin-left: 0.4rem;
+  padding: 0.12rem 0.45rem;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  border: 1px solid var(--border-light, #e7e5e4);
+  vertical-align: middle;
+}
+
+[data-theme="dark"] .footer-stats-wrap {
+  background: #1e1b18;
+  border-color: #383430;
+  color: #a8a29e;
+}
+[data-theme="dark"] .drawer-views {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: #383430;
+}
+[data-theme="sepia"] .footer-stats-wrap {
+  background: #f7f3e8;
+  border-color: #ded8c7;
+}
+
+@media (max-width: 640px) {
+  .footer-stats-wrap {
+    font-size: 0.72rem;
+    padding: 0.22rem 0.6rem;
+    gap: 0.35rem;
+  }
+}

@@ -160,6 +160,7 @@ def sync_code_and_config():
         "data/config.json",
         "data/resonances.json",
         "data/tombstones.json",
+        "data/stats.json",
         "public/intro.mp4",
         "public/intro-poster.jpg",
         "public/sitemap.xml",

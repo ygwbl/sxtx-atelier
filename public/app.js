@@ -38,7 +38,7 @@
 // --------------------------------------------------------------------------
 // 0. Release Fingerprint & Auto-Busting Cache Healer
 // --------------------------------------------------------------------------
-const CURRENT_RELEASE_VER = '20261106_v39';
+const CURRENT_RELEASE_VER = '20261106_v40';
 try {
   if (localStorage.getItem('atelier_ver') !== CURRENT_RELEASE_VER) {
     localStorage.setItem('atelier_ver', CURRENT_RELEASE_VER);
@@ -434,6 +434,7 @@ async function initData() {
   fetchMessages();
   fetchConfig();
   fetchStatus();
+  fetchAndReportStats();
   checkAuthStatus();
 }
 
@@ -529,6 +530,46 @@ async function fetchStatus() {
       if (coreEl) coreEl.textContent = '纯原生 · 零依赖';
     }
   } catch (e) {}
+}
+
+// v40 · 纸境全站访问统计与单篇围阅量中枢
+let siteStatsCache = null;
+
+async function fetchAndReportStats(articleId = null) {
+  try {
+    const res = await fetch('/api/stats/view', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(articleId ? { articleId: String(articleId) } : {}),
+      cache: 'no-store'
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.ok) return null;
+    siteStatsCache = data;
+    updateStatsUI(data);
+    return data;
+  } catch (err) {
+    console.warn('[Stats] Error:', err);
+    return null;
+  }
+}
+
+function updateStatsUI(stats) {
+  if (!stats) return;
+  const fmt = n => (Number(n) || 0).toLocaleString();
+  
+  // 1. 时间轴概览数据栏
+  const tstatPv = document.getElementById('tstat-pv');
+  if (tstatPv) tstatPv.textContent = fmt(stats.pv);
+
+  // 2. 页脚数据徽章
+  const fPv = document.getElementById('fstat-pv');
+  const fUv = document.getElementById('fstat-uv');
+  const fToday = document.getElementById('fstat-today-pv');
+  if (fPv) fPv.textContent = fmt(stats.pv);
+  if (fUv) fUv.textContent = fmt(stats.uv);
+  if (fToday) fToday.textContent = fmt(stats.todayPv);
 }
 
 // --------------------------------------------------------------------------
@@ -746,7 +787,7 @@ function renderMessages() {
           <div class="msg-echo-box">
             <div class="echo-header">
               <div class="echo-sender">
-                <img src="/logo.png?v=20261106_v39" alt="工坊主理人" class="echo-avatar">
+                <img src="/logo.png?v=20261106_v40" alt="工坊主理人" class="echo-avatar">
                 <span class="echo-author-name">${escapeHtml(msg.echo.author || '工坊回笔')}</span>
                 <span class="echo-badge-seal">主理人</span>
               </div>
@@ -824,6 +865,17 @@ function renderReader(article) {
   
   titleEl.textContent = article.title;
   sumEl.textContent = article.summary || '';
+
+  // v40 · 文章围阅量动态上报与展示
+  const viewsCountEl = document.getElementById('reader-views-count');
+  if (viewsCountEl) {
+    const artKey = article.slug || article.id;
+    fetchAndReportStats(artKey).then(data => {
+      if (data && data.articleViews) {
+        viewsCountEl.textContent = Number(data.articleViews).toLocaleString();
+      }
+    });
+  }
 
   // Render markdown or html
   // Build AI Insight Card
