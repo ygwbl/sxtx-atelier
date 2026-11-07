@@ -110,22 +110,44 @@ function verifyAuthToken(token) {
 // Default config
 function getOrInitConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
-    // v37 · 不再内置固定默认口令；首次启动生成随机强密钥，只打印一次
+    // 首次启动：优先使用环境变量口令，否则生成随机高强口令并在终端仅打印一次
     const initialPwd = process.env.ATELIER_INITIAL_PASSWORD || crypto.randomBytes(15).toString("base64url");
     const pwdSalt = crypto.randomBytes(16);
     const pwdKey = crypto.scryptSync(initialPwd, pwdSalt, 64, SCRYPT_OPT);
-    const defaultConfig = {
-      adminPasswordHash: "scrypt$" + pwdSalt.toString("hex") + "$" + pwdKey.toString("hex"),
-      siteTitle: "Sxltx · 纸境工坊",
+    
+    // 优先从 config.example.json 模板继承完整规范
+    const EXAMPLE_CONFIG_FILE = path.join(DATA_DIR, "config.example.json");
+    let baseConfig = {};
+    if (fs.existsSync(EXAMPLE_CONFIG_FILE)) {
+      try {
+        baseConfig = JSON.parse(fs.readFileSync(EXAMPLE_CONFIG_FILE, "utf-8"));
+        delete baseConfig._comment;
+      } catch (e) {
+        baseConfig = {};
+      }
+    }
+
+    const defaultConfig = Object.assign({
+      siteTitle: "纸境工坊",
       siteSubtitle: "在微云之境，构筑自治的工程工作流与思想自留地。",
-      author: "Sxltx",
-      bio: "这里是 Sxltx 的个人工坊。记录关于云原生架构、现代极简交互与自动化系统的深度沉淀；没有浮躁的算法推荐与杂乱信息，仅保留文字、代码与运行中的造物。",
-      stampText: "纸境\nATELIER"
-    };
+      author: "纸境墨客",
+      bio: "这里是纸境工坊。记录关于云原生架构、现代极简交互与自动化系统的深度沉淀；没有浮躁的算法推荐与杂乱信息，仅保留文字、代码与运行中的造物。",
+      stampText: "纸境\nATELIER",
+      ai: {
+        provider: "openai-compatible",
+        baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        apiKey: "",
+        model: "glm-4-flash",
+        authorName: "工坊回笔 · 墨客"
+      }
+    }, baseConfig, {
+      adminPasswordHash: "scrypt$" + pwdSalt.toString("hex") + "$" + pwdKey.toString("hex")
+    });
+
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(defaultConfig, null, 2), "utf-8");
     if (!process.env.ATELIER_INITIAL_PASSWORD) {
-      console.warn("\n[安全] 首次启动，初始管理密钥：" + initialPwd);
-      console.warn("[安全] 仅显示这一次，请立即登录后台修改。\n");
+      console.warn("\n[安全] 首次启动，已生成初始管理密钥：" + initialPwd);
+      console.warn("[安全] 仅显示这一次，请登录后台立即保存或修改。\n");
     }
     return defaultConfig;
   }
@@ -1392,12 +1414,50 @@ const server = http.createServer(async (req, res) => {
     return sendJSON(req, res, 200, { ok: true });
   }
 
-  // Smart Echo Generator for Guestbook (Supports GLM-4-Flash & Local Semantic Engine)
-  // v40 · 智能回笔中枢：精准意图分流 + 严禁注水小作文 + 真实博主朋友人设
+  // Smart Echo Generator for Guestbook (OpenAI-Compatible Engine: DeepSeek / GLM / Qwen / Ollama / OpenAI)
+  // 智能回笔中枢：精准意图分流 + 严禁注水小作文 + 极简工程师博主人设
   async function generateSmartEcho(content, author, placeStr) {
     const text = (content || "").toLowerCase();
     const config = getOrInitConfig();
-    const glmKey = process.env.ZHIPU_API_KEY || process.env.GLM_API_KEY || config.glmApiKey;
+    const aiConfig = config.ai || {};
+    
+    // API 凭据：环境变量优先，其次 config.ai.apiKey，兼容历史 config.glmApiKey
+    const aiKey = (
+      process.env.AI_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      process.env.ZHIPU_API_KEY ||
+      process.env.GLM_API_KEY ||
+      aiConfig.apiKey ||
+      config.glmApiKey ||
+      ""
+    ).trim();
+
+    let aiUrl = (
+      process.env.AI_BASE_URL ||
+      process.env.OPENAI_BASE_URL ||
+      aiConfig.baseUrl ||
+      config.aiBaseUrl ||
+      "https://open.bigmodel.cn/api/paas/v4/chat/completions"
+    ).trim();
+
+    // 自动补齐标准 OpenAI 路由
+    if (!aiUrl.endsWith("/chat/completions")) {
+      aiUrl = aiUrl.replace(/\/+$/, "");
+      if (!aiUrl.endsWith("/v1")) {
+        aiUrl += "/v1";
+      }
+      aiUrl += "/chat/completions";
+    }
+
+    const aiModel = (
+      process.env.AI_MODEL ||
+      process.env.OPENAI_MODEL ||
+      aiConfig.model ||
+      "glm-4-flash"
+    ).trim();
+
+    const siteAuthor = config.author || "纸境墨客";
+    const authorName = aiConfig.authorName || (aiModel.toLowerCase().includes("glm") ? "工坊回笔 · GLM" : "工坊回笔 · 墨迹");
 
     // 超短/无实质意图：回一句自然简朴的收讫，不调用大模型
     const brief = () => ({
@@ -1408,7 +1468,7 @@ const server = http.createServer(async (req, res) => {
 
     if (!shouldUseGLM(content)) return brief();
 
-    if (glmKey && acquireGLMSlot()) {
+    if (aiKey && acquireGLMSlot()) {
       try {
         // 意图深度洞察，下达严格的字数与语气红线
         let intentInstruction = "这是一条日常交流留言。";
@@ -1426,7 +1486,7 @@ const server = http.createServer(async (req, res) => {
           intentInstruction = "【意图：交流探讨】请针对访客提到的具体事实真诚交流（30~70字），就事论事，语气平和、有分寸，像真实的博主朋友随手回笔。";
         }
 
-        const systemPrompt = `你是独立技术博客「纸境工坊」的主理人 Sxltx（一名崇尚东方极简与纯原生现代 Web 的全栈工程师）。你正在留言簿给访客写回笔。
+        const systemPrompt = `你是独立自留地「${config.siteTitle || '纸境工坊'}」的主理人 ${siteAuthor}（一名崇尚东方极简与纯原生现代 Web 的全栈工程师）。你正在留言簿给访客写回笔。
 
 【核心准则】
 1.【严禁注水小作文】：严格遵守用户提示中的字数限制，宁短勿长。打卡问候绝不超过 40 字。
@@ -1439,22 +1499,22 @@ const server = http.createServer(async (req, res) => {
 
         const userPrompt = `访客称谓：${author || '墨友'}${placeStr && placeStr !== '远方' ? `（来自：${placeStr}）` : ''}\n留墨内容：${content}\n\n【本条指令】：${intentInstruction}`;
 
-        const resp = await fetch("https://open.bigmodel.cn/api/paas/v4/chat/completions", {
+        const resp = await fetch(aiUrl, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${glmKey.trim()}`,
+            "Authorization": `Bearer ${aiKey}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "glm-4-flash",
+            model: aiModel,
             messages: [
               { role: "system", content: systemPrompt },
               { role: "user", content: userPrompt }
             ],
             temperature: 0.35,
-            max_tokens: 160
+            max_tokens: 180
           }),
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(7000)
         });
 
         if (resp.ok) {
@@ -1464,17 +1524,17 @@ const server = http.createServer(async (req, res) => {
           aiReply = aiReply.replace(/^.*?[，,]\s*(您好|你好)[！!。]?\s*/, "");
           if (aiReply && !isTemplateEcho(aiReply)) {
             return {
-              author: "工坊回笔 · GLM",
+              author: authorName,
               content: aiReply,
               time: new Date().toISOString()
             };
           }
-          if (aiReply) console.warn("[GLM] 回复命中模板痕迹，已降级为本地回笔:", aiReply.slice(0, 40));
+          if (aiReply) console.warn("[AI-Echo] 回复命中模板痕迹，已降级为本地回笔:", aiReply.slice(0, 40));
         } else {
-          console.warn("[GLM] API call failed with status", resp.status);
+          console.warn("[AI-Echo] API 调用失败，状态码:", resp.status);
         }
       } catch (err) {
-        console.warn("[GLM] Error invoking GLM API:", err.message);
+        console.warn("[AI-Echo] 调用大模型接口异常:", err.message);
       } finally {
         releaseGLMSlot();
       }

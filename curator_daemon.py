@@ -47,7 +47,7 @@ MESSAGES_FILE = os.path.join(DATA_DIR, "messages.json")
 SYND_DIR = os.path.join(DATA_DIR, "syndications")
 LOG_FILE = os.path.join(BASE_DIR, "curator.log")
 
-INDEXNOW_KEY = "7fa8d1f2b67f3a42d881e19d7b5f0962"
+INDEXNOW_KEY = os.getenv("INDEXNOW_KEY", "")
 BEIJING_TZ = timezone(timedelta(hours=8))
 
 os.makedirs(DATA_DIR, exist_ok=True)
