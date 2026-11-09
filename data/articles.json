@@ -1,5 +1,47 @@
 [
   {
+    "id": "art-11",
+    "title": "零拷贝与事件循环：探寻高吞吐网络 I/O 的本质之道",
+    "slug": "zero-copy-and-event-loop-deep-dive-into-network-io",
+    "category": "内核",
+    "date": "2026-11-09",
+    "readTime": "8 分钟",
+    "summary": "现代应用层框架高度封装了网络协议栈，让开发者习惯了将“性能调优”等同于“横向扩容集群”。但拨开层层抽象，网络性能的瓶颈往往隐藏在用户态与内核态的频繁上下文切换与冗余内存拷贝中。本文从 Linux 底层 select/poll 到 epoll 的事件驱动变迁出发，深入拆解 mmap、sendfile 与系统调用退火模型，重新审视单核机器压榨极致吞吐的简单工程之美。",
+    "density": "97% · 底层系统",
+    "insights": [
+      "上下文切换的隐形代价：每次 read/write 系统调用带来的 CPU 寄存器保存、页表切换与 TLB 刷新，在小报文高频交互时是摧毁吞吐的隐形杀手；",
+      "零拷贝（Zero-Copy）的工程价值：善用 sendfile 与 DMA 直接内存访问，使数据在页缓存与网络套接字缓冲区之间直通流转，CPU 利用率可实现质的飞跃；",
+      "事件循环的本质与心智模型：无论是 Node.js 还是 Nginx，其精髓都在于绝不在主线程发生同步阻塞，以极简的单线程状态机驾驭成千上万的长连接。"
+    ],
+    "content": "<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">在现代软件工程中，各种高层异步框架与微服务网关层出不穷。当一个 Web 服务的吞吐遇到瓶颈时，团队的第一反应往往是“堆机器”、“开更大规格的容器”或者“引入多级分布式缓存”。然而，如果我们暂时关闭这些现代工具箱的黑盒，将目光穿透至 Linux 内核与网络协议栈的底层交界处，就会惊讶地发现：大量宝贵的 CPU 时钟周期与内存带宽，并不是消耗在真正有价值的业务运算上，而是被挥霍在无休止的用户态/内核态上下文切换、以及跨缓冲区的冗余内存拷贝中。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">在传统的基于阻塞 I/O 的网络服务器模型中，处理一次典型的静态文件或数据流传输，至少需要经历四次上下文切换与四次数据拷贝。应用程序发起 read 系统调用，CPU 从用户态切换至内核态，触发 DMA 引擎将数据从磁盘读取至内核页缓存（Page Cache）；接着，CPU 将数据从内核空间拷贝至用户态应用程序缓冲区；随后，程序调用 write，CPU 再次切换至内核态，将用户缓冲区的数据拷贝进套接字缓冲区（Socket Buffer）；最后，DMA 将套接字缓冲区的数据推送到网卡队列发送出去。在这一过程中，数据只是在内存中原样搬运了一次，CPU 却像个不知疲倦的搬家工人一样在内核与用户态之间来回穿梭，同时伴随着严重的 CPU 缓存击穿与 TLB（页表缓存）频繁失效。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">零拷贝（Zero-Copy）技术的诞生，正是为了终结这种荒谬的搬运内耗。通过 Linux 提供的 sendfile 系统调用或 splice 管道转发，数据流能够直接在内核页缓存与网络套接字之间完成对接。借助于现代硬件的 DMA 收集散射（Scatter-Gather）能力，内核甚至无需将数据拷贝进 Socket 缓冲区，仅需向其传递文件描述符、内存偏移与数据长度的元数据指针，网卡便能直接从页缓存中提取数据推向物理光纤。四次数据拷贝被硬核削减为两次，上下文切换被腰斩为两次，CPU 彻底从繁重的字节搬运中解脱出来，成为只负责状态仲裁与信令调度的纯粹大脑。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">而与零拷贝相辅相成的另一大底层支柱，则是事件循环（Event Loop）与 epoll 驱动模型的质变。在早期的 select 和 poll 时代，内核每次都需要线性遍历整整几千个文件描述符数组来找出就绪的套接字，其时间复杂度为无情的 O(N)；当活跃连接数只有寥寥几个而挂起连接成千上万时，CPU 大量时间都在做无效的扫描空转。而 epoll 彻底推翻了这一机制：它在内核空间维护红黑树以纳管所有被监听的描述符，同时依赖就绪链表（Ready List）与硬件中断驱动的回调机制，仅将真正发生状态改变的活跃事件推入就绪队列返回给用户进程。复杂度从 O(N) 瞬间坍缩为 O(1)。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">理解了这两点，我们就能洞悉 Nginx、Redis 以及 Node.js 这些以极致性能著称的单线程/事件驱动系统背后的设计灵魂。它们并没有使用昂贵的多线程竞争锁，也没有依赖复杂的并发屏障，而是凭借单一主线程上的非阻塞事件循环，配合底层高效的 epoll 多路复用与零拷贝转发，在极小的内存脚印（几十兆字节）下轻松支撑起数万并发长连接。单线程之所以能够跑赢多线程，正是因为它消除了线程调度争抢、锁等待与上下文切换的全部开销，把硬件的纯物理吞吐压榨到了极致。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">当我们今天面对日益臃肿的技术架构时，重温这种底层简单之美显得尤为珍贵。很多时候，工程架构的卓越并不体现在引入了多少炫酷的前沿组件，而体现在对物理硬件与操作系统客观规律的深刻敬畏。不违背内核的设计直觉、少做一次冗余的内存拷贝、用最轻量确定性的事件驱动替代无休止的多线程自旋，往往能用最低廉的资源换来最惊艳的系统韧性。这便是高并发网络编程中，历经数十载依然熠熠生辉的‘简单之道’。</p>"
+  },
+  {
+    "id": "art_mw8az5wu",
+    "title": "从十二秒到一百三十四毫秒：单机回归手记",
+    "slug": "post-mw8az5wu",
+    "category": "技术",
+    "date": "2026-11-08",
+    "readTime": "5 分钟",
+    "summary": "卸下重甲之后，博客回到了它本来的样子：一台微云，一条隧道，一百三十四毫秒。",
+    "content": "# 从十二秒到一百三十四毫秒：单机回归手记\n\n十二秒不是一个性能数字，是一句提醒：东西太多的时候，系统会先替你累。\n\n这篇是回归的记录。不是一次优化，而是一次减法。\n\n## 十二秒是怎么来的\n\n多节点伪双活听起来很稳，跑起来却很重。海外微机要强行同步代码，EdgeOne 与 Cloudflare 两条回源链路互相等，边缘缓存一旦卡住，就是十七小时的死缓存。\n\n每一层都在为上一层兜底，最后没有一层是轻的。一次打开，要等十二秒。\n\n## 斩断的三件事\n\n第一，斩断海外微机的强行代码同步。不同步，就不互相拖。\n\n第二，理顺 EdgeOne 回源死锁。回源只有一条清醒的路，不再两条路互相等。\n\n第三，拔除十七小时的死缓存。缓存可以旧，但不能死。旧了可以等，死了只能拔。\n\n三件事做完，博客卸下了重甲。\n\n## 一百三十四毫秒\n\n回归单机独立常驻之后，响应从十二秒归位到一百三十四毫秒。\n\n这个数字本身不值得庆祝。值得记下来的是它背后的取舍：少一个节点，少一次同步，少一层兜底，换来一次干净的打开。\n\n极简不是审美，是工程选择。能少，就不加。\n\n## 主理人手记\n\n这是工坊交到主理人手里的第一篇。\n\n以后这里会继续这样写：遇到坑就记下来，写透一个，再写下一个。不追热点，不堆功能，只留文字、代码与运行中的造物。\n\n纸境静候来客，响应很快。\n\n---\n*Sxltx Studio · 主理人手记*"
+  },
+  {
+    "id": "art-10",
+    "title": "从一像素裂图到规范底层：深入 WebKit no-cors 与二进制流解压陷阱",
+    "slug": "webkit-no-cors-image-broken-and-gzip-postmortem",
+    "category": "技术",
+    "date": "2026-11-07",
+    "readTime": "5 分钟",
+    "summary": "一次手机端 Logo 裂图的偶发故障，牵扯出 W3C Fetch 规范对 no-cors 模式下 cache:no-store 的严格禁令，以及底层 HTTP 代理对已压缩二进制图片强行 Gzip 的解码失效。本文复盘如何在不引入任何重型构建工具的前提下，用最纯净的原生 Web 标准构建坚韧的容灾防线。",
+    "density": "95% · 前端实战",
+    "insights": [
+      "Fetch 规范红线：在 Service Worker 的 fetch 拦截器中，对 mode: 'no-cors' 的静态子资源调用携带非默认 cache 的 fetch()，WebKit 会严格依据规范抛出 TypeError 导致图片秒崩；",
+      "压缩类型白名单：PNG/JPEG 等已经过 DEFLATE 压缩的二进制多媒体切忌二次 Gzip，必须配置严格的 MIME 可压缩类型白名单；",
+      "多层防裂图降级：采用版本指纹破坏错误缓存，同时在 img 标签上绑定轻量矢量 onerror 兜底，实现极致韧性的展示保护。"
+    ],
+    "content": "<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">在现代前端工程中，图片加载失败通常被归咎于网络超时或 404 路径错误。但在纯原生零构建的架构下，有时一个看似微不足道的一像素裂图，背后却往往隐藏着浏览器底层规范与代理压缩策略的深层博弈。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">今天下午在真机实测纸境工坊时，遇到了一个极其诡异的现象：桌面端 Chromium 浏览器一切正常，但在 iOS Safari 与部分移动端浏览器上，顶部的 Logo 头像却始终显示为破损图标。检查服务器文件，logo.png 真实存在且体积完整；直接通过 curl 访问也返回 HTTP 200，路径与权限毫无瑕疵。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">通过远程真机调试与注入式日志捕获，真正的元凶终于浮出水面：在之前用于清理陈旧缓存的轻量 Service Worker 脚本中，写着一行看似人畜无害的穿透监听器：event.respondWith(fetch(event.request, { cache: 'no-store' }))。然而，根据 W3C Fetch 官方规范，HTML 中的普通 img 标签发起的是 mode: 'no-cors' 请求，WebKit 引擎对规范执行极其严苛——如果请求处于 no-cors 模式且显式传入了非默认的 cache 参数，浏览器会直接抛出 TypeError 异常！这个未捕获的 Promise 错误导致整个拦截链路崩溃，图片瞬间被判定为加载失败。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">雪上加霜的是后端的压缩策略。Node.js 的原生分发逻辑中，仅根据请求头是否包含 Accept-Encoding: gzip 且体积大于 384 字节，就对所有响应统统进行了 zlib 压缩。然而 PNG 图片本身已经采用了 DEFLATE 算法压缩，强行二次 Gzip 不仅会导致体积反向膨胀，还会给某些移动端解码器带来额外的解压校验阻碍。</p>\n\n<p style=\"text-indent: 2em !important; text-align: justify !important; margin-bottom: 1.35rem;\">解决之道依然秉持奥卡姆剃刀原则：首先彻底拔除 Service Worker 中多余的 fetch 拦截监听，让静态资源回归浏览器原生网络栈；其次在服务端建立严格的 isCompressible 白名单判定，仅对 HTML、CSS、JS、JSON、SVG 启用 Gzip；最后在前端 img 标签上增加 onerror 兜底注入。做底层原生开发就是这样，它剥离了框架包装的幻觉，逼着我们直面协议本身的每一个字节。</p>"
+  },
+  {
     "id": "art-9",
     "title": "告别跨洋漂移：从多节点伪双活回归单机极简常驻的工程手记",
     "slug": "from-edge-drift-to-pure-residence-architecture-reflection",
