@@ -17,6 +17,9 @@
   <img src="https://img.shields.io/badge/License-MIT-amber?style=for-the-badge" alt="MIT License">
 </p>
 
+> [!NOTE]
+> 🐧 **开源社区友链**：本项目深度认可并加入 **[LINUX DO](https://linux.do/)** 开源技术社区（真诚、友善、团结、专业），特此鸣谢社区广大佬友的支持与建议！
+
 ---
 
 ## 🎐 在线实机体验 (Live Demos)
